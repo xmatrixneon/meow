@@ -1,4 +1,5 @@
 // types/auth.ts
+// claude code 
 
 import type { User } from './index';
 
