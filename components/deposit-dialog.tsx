@@ -35,6 +35,9 @@ export function DepositDialog({ open, onOpenChange, upiId, qrImage, onSuccess }:
         setUtr("");
         onSuccess();
         onOpenChange(false);
+      } else {
+        // Handle validation errors returned from API (success: false)
+        toast.error(data.message || "Failed to verify payment");
       }
     },
     onError: (error) => {

@@ -6,6 +6,7 @@ import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Search,
   Zap,
@@ -66,7 +67,7 @@ interface Service {
 interface ServerOption {
   id: string;
   name: string;
-  price: number; // INR price from server
+  price: number;
   stock: number;
   successRate: number;
   avgTime: string;
@@ -179,14 +180,13 @@ function ServerCard({
   const outOfStock = server.stock === 0;
   const lowStock = server.stock > 0 && server.stock < 20;
 
-  // Find the price for the selected service on this server
   const selectedService = selectedServiceName
-    ? server.services?.find((s) =>
-        s.name.toLowerCase() === selectedServiceName.toLowerCase() ||
-        s.code.toLowerCase() === selectedServiceName.toLowerCase()
+    ? server.services?.find(
+        (s) =>
+          s.name.toLowerCase() === selectedServiceName.toLowerCase() ||
+          s.code.toLowerCase() === selectedServiceName.toLowerCase()
       )
     : server.services?.[0];
-  // Convert Prisma Decimal to number, use fallback if both are null/undefined
   const price = Number(selectedService?.basePrice ?? server.price ?? 0);
 
   return (
@@ -196,7 +196,9 @@ function ServerCard({
       transition={{ type: "spring" as const, stiffness: 280, damping: 24 }}
       className={cn(
         "bg-card border rounded-2xl p-4",
-        outOfStock ? "border-border opacity-60" : "border-border hover:border-primary/30",
+        outOfStock
+          ? "border-border opacity-60"
+          : "border-border hover:border-primary/30"
       )}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -204,7 +206,7 @@ function ServerCard({
           <div
             className={cn(
               "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden",
-              outOfStock ? "bg-muted" : "bg-primary/10 dark:bg-primary/15",
+              outOfStock ? "bg-muted" : "bg-primary/10 dark:bg-primary/15"
             )}
           >
             {server.flagUrl ? (
@@ -217,7 +219,9 @@ function ServerCard({
                 unoptimized
               />
             ) : server.countryIso ? (
-              <span className="text-lg">{getCountryFlagEmoji(server.countryIso)}</span>
+              <span className="text-lg">
+                {getCountryFlagEmoji(server.countryIso)}
+              </span>
             ) : (
               <Server
                 size={16}
@@ -230,7 +234,9 @@ function ServerCard({
             <p className="font-bold text-sm text-foreground">{server.name}</p>
             <div className="flex items-center gap-1">
               <IndianRupee size={12} className="text-primary" />
-              <p className="text-xl font-bold text-primary tabular-nums">{price.toFixed(2)}</p>
+              <p className="text-xl font-bold text-primary tabular-nums">
+                {price.toFixed(2)}
+              </p>
             </div>
           </div>
         </div>
@@ -258,7 +264,11 @@ function ServerCard({
             <p
               className={cn(
                 "text-sm font-bold tabular-nums",
-                outOfStock ? "text-muted-foreground" : lowStock ? "text-amber-500" : "text-foreground",
+                outOfStock
+                  ? "text-muted-foreground"
+                  : lowStock
+                  ? "text-amber-500"
+                  : "text-foreground"
               )}
             >
               {server.stock}
@@ -269,7 +279,9 @@ function ServerCard({
         <div className="flex flex-col items-center gap-0.5 bg-muted/40 rounded-xl py-2">
           <div className="flex items-center gap-1">
             <CheckCircle2 size={10} className="text-green-500" />
-            <p className="text-sm font-bold text-green-500 tabular-nums">{server.successRate}%</p>
+            <p className="text-sm font-bold text-green-500 tabular-nums">
+              {server.successRate}%
+            </p>
           </div>
           <p className="text-[10px] text-muted-foreground">Success</p>
         </div>
@@ -287,11 +299,8 @@ function ServerCard({
 
 // ─── page ─────────────────────────────────────────────────────────────────────
 export default function MiniAppPage() {
-  // ✅ single source of truth — provider fires autoSignInFromMiniApp() once,
-  //    sets the session cookie, and useSession() picks it up reactively
   const { data: session, isPending } = authClient.useSession();
 
-  // State declarations (must be before queries that use them)
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [serviceOffset, setServiceOffset] = useState(0);
@@ -302,32 +311,26 @@ export default function MiniAppPage() {
   const [bought, setBought] = useState<string | null>(null);
   const router = useRouter();
 
-  // Reset offset when search changes
   useEffect(() => {
     setServiceOffset(0);
   }, [debouncedSearch]);
 
-  // tRPC queries
-  const { data: servicesData, isLoading: isLoadingServices } = trpc.service.list.useQuery(
-    { search: debouncedSearch, limit: 20, offset: serviceOffset },
-    {
-      staleTime: 5 * 60 * 1000, // 5 minutes cache
-    }
-  );
+  const { data: servicesData, isLoading: isLoadingServices } =
+    trpc.service.list.useQuery(
+      { search: debouncedSearch, limit: 20, offset: serviceOffset },
+      { staleTime: 5 * 60 * 1000 }
+    );
   const { data: serversData } = trpc.service.servers.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    staleTime: 5 * 60 * 1000,
   });
   const { data: walletData } = trpc.wallet.balance.useQuery();
   const { data: settingsData } = trpc.service.settings.useQuery();
 
-  // Utils for query invalidation
   const utils = trpc.useUtils();
 
-  // Buy mutation
   const buyMutation = trpc.number.buy.useMutation({
     onSuccess: (data) => {
       if (data.success && data.number) {
-        // Invalidate queries to update wallet and numbers immediately
         utils.number.getActive.invalidate();
         utils.number.getReceived.invalidate();
         utils.wallet.balance.invalidate();
@@ -342,7 +345,6 @@ export default function MiniAppPage() {
       }
     },
     onError: (error) => {
-      // Provide better error messages
       let errorMessage = error.message || "Failed to assign number";
       if (errorMessage.includes("balance") || errorMessage.includes("INSUFFICIENT")) {
         errorMessage = "Insufficient balance. Add funds to continue.";
@@ -356,28 +358,28 @@ export default function MiniAppPage() {
     },
   });
 
-  // Transform services data from tRPC
-  const services: Service[] = servicesData?.services.map((s) => ({
-    id: s.id,
-    name: s.name,
-    emoji: s.iconUrl || "📱",
-    category: "Service",
-  })) || [];
+  const services: Service[] =
+    servicesData?.services.map((s) => ({
+      id: s.id,
+      name: s.name,
+      emoji: s.iconUrl || "📱",
+      category: "Service",
+    })) || [];
 
-  // Transform servers data from tRPC - group by server and show service prices
-  const servers: ServerOption[] = serversData?.servers.map((s: any) => ({
-    id: s.id,
-    name: s.name,
-    price: s.services?.[0]?.basePrice || 5.00, // Use first service's price or default
-    stock: 100,
-    successRate: 95,
-    avgTime: "~30s",
-    countryCode: s.countryCode || "IN",
-    countryIso: s.countryIso || "IN",
-    countryName: s.countryName || "India",
-    flagUrl: s.flagUrl,
-    services: s.services,
-  })) || [];
+  const servers: ServerOption[] =
+    serversData?.servers.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      price: s.services?.[0]?.basePrice || 5.0,
+      stock: 100,
+      successRate: 95,
+      avgTime: "~30s",
+      countryCode: s.countryCode || "IN",
+      countryIso: s.countryIso || "IN",
+      countryName: s.countryName || "India",
+      flagUrl: s.flagUrl,
+      services: s.services,
+    })) || [];
 
   const user = session?.user as User | undefined;
 
@@ -401,11 +403,11 @@ export default function MiniAppPage() {
     setSelectedServerId(serverId);
     setBuying(serverId);
 
-    // Find the service that matches the selected service name and server
     const server = serversData?.servers.find((s: any) => s.id === serverId);
-    const service = server?.services?.find((s: any) =>
-      s.name.toLowerCase() === selected.name.toLowerCase() ||
-      s.code.toLowerCase() === selected.name.toLowerCase()
+    const service = server?.services?.find(
+      (s: any) =>
+        s.name.toLowerCase() === selected.name.toLowerCase() ||
+        s.code.toLowerCase() === selected.name.toLowerCase()
     );
 
     if (!service) {
@@ -426,13 +428,10 @@ export default function MiniAppPage() {
     }
   }, [servicesData?.hasMore]);
 
-  
-  // ── Skeleton — only when no session yet (new user / first load)
   if (isPending && !user) {
     return <PageSkeleton />;
   }
 
-  // ── Not in Telegram or sign-in failed
   if (!user) {
     return (
       <div className="min-h-[calc(100vh-7rem)] flex flex-col items-center justify-center gap-5 p-6">
@@ -456,7 +455,6 @@ export default function MiniAppPage() {
     );
   }
 
-  // ── Authenticated ─────────────────────────────────────────────────────────
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
@@ -500,7 +498,9 @@ export default function MiniAppPage() {
               <div className="flex items-center gap-1">
                 <Wallet size={11} className="text-green-500" />
                 <IndianRupee size={11} className="text-green-500" />
-                <span className="text-xs font-bold text-green-500">{Number(walletData?.balance ?? 0).toFixed(2)}</span>
+                <span className="text-xs font-bold text-green-500">
+                  {Number(walletData?.balance ?? 0).toFixed(2)}
+                </span>
               </div>
               <div className="flex items-center gap-1">
                 <Star size={11} className="text-amber-500" />
@@ -533,51 +533,61 @@ export default function MiniAppPage() {
           )}
         </motion.div>
 
-        {/* Services grid */}
+        {/* Services section */}
         <motion.div {...fadeUp(0.1)}>
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 px-1 mb-3">
-            {debouncedSearch ? `Results for "${debouncedSearch}"` : "Choose a service"}
+            {debouncedSearch
+              ? `Results for "${debouncedSearch}"`
+              : "Choose a service"}
           </p>
-          <AnimatePresence mode="popLayout">
-            {services.length === 0 ? (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col items-center py-10 gap-2"
-              >
-                <Hash size={28} className="text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No services found</p>
-              </motion.div>
-            ) : (
-              <motion.div key="grid" className="grid grid-cols-4 gap-2.5">
-                {services.map((service, i) => (
-                  <ServiceCard
-                    key={service.id}
-                    service={service}
-                    onClick={() => handleSelectService(service)}
-                    delay={i * 0.03}
-                  />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
 
-          {/* Load More button */}
-          {servicesData?.hasMore && (
-            <motion.div {...fadeUp(0.2)} className="flex justify-center pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLoadMore}
-                disabled={isLoadingServices}
-                className="text-xs"
-              >
-                {isLoadingServices ? "Loading..." : "Load More Services"}
-              </Button>
-            </motion.div>
-          )}
+          {/* ── Scrollable services box ── */}
+          <ScrollArea className="h-[272px] w-full rounded-2xl border border-border">
+            <div className="p-2.5">
+              <AnimatePresence mode="popLayout">
+                {services.length === 0 ? (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col items-center py-10 gap-2"
+                  >
+                    <Hash size={28} className="text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">
+                      No services found
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div key="grid" className="grid grid-cols-4 gap-2.5">
+                    {services.map((service, i) => (
+                      <ServiceCard
+                        key={service.id}
+                        service={service}
+                        onClick={() => handleSelectService(service)}
+                        delay={i * 0.03}
+                      />
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Load More inside scroll area */}
+              {servicesData?.hasMore && (
+                <div className="flex justify-center pt-4 pb-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoadMore}
+                    disabled={isLoadingServices}
+                    className="text-xs"
+                  >
+                    {isLoadingServices ? "Loading..." : "Load More Services"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </motion.div>
 
         {/* Recent numbers */}
@@ -586,7 +596,9 @@ export default function MiniAppPage() {
           className="bg-card border border-border rounded-2xl p-4"
         >
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-foreground">Recent Numbers</p>
+            <p className="text-sm font-semibold text-foreground">
+              Recent Numbers
+            </p>
             <button
               type="button"
               onClick={() => router.push("/numbers")}
@@ -621,7 +633,9 @@ export default function MiniAppPage() {
                 </span>
               )}
               <div>
-                <p className="font-bold text-base text-foreground">{selected?.name}</p>
+                <p className="font-bold text-base text-foreground">
+                  {selected?.name}
+                </p>
                 <p className="text-xs text-muted-foreground font-normal">
                   Choose a server to get a number
                 </p>
@@ -648,7 +662,11 @@ export default function MiniAppPage() {
                     >
                       <motion.div
                         animate={{ rotate: 360 }}
-                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
                         className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary"
                       />
                       <span className="text-sm font-medium text-foreground">
@@ -656,20 +674,6 @@ export default function MiniAppPage() {
                       </span>
                     </motion.div>
                   )}
-                  {/* {bought === server.id && (
-                    <motion.div
-                      key={`bought-${server.id}`}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-green-500/10 border border-green-500/30 rounded-2xl flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle2 size={18} className="text-green-500" />
-                      <span className="text-sm font-bold text-green-500">
-                        Number assigned!
-                      </span>
-                    </motion.div>
-                  )} */}
                 </AnimatePresence>
               </div>
             ))}

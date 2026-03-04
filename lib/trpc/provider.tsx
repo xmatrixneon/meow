@@ -6,6 +6,17 @@ import { useState, type ReactNode } from "react";
 import superjson from "superjson";
 import { trpc } from "./client";
 
+//  removed 1 line
+//       74            // Add fetch wrapper to handle non-JSON responses                                                                                                                   
+//       75            async fetch(url, options) {                                                                                                                                  
+//       76              try {                                                                                                                                                             
+//       77 -              const response = await fetch(url, options);                                                                                                                     
+//       77 +              // Include credentials for cookie-based authentication                                                                                                          
+//       78 +              const response = await fetch(url, {                                                                                                                             
+//       79 +                ...options,                                                                                                                                                   
+//       80 +                credentials: "include",                                                                                                                                       
+//       81 +              });                 
+
 /**
  * Props for TRPCProvider component
  */
