@@ -3,10 +3,9 @@ import { motion } from "framer-motion";
 import {
   Home,
   Wallet,
-  MessageCircle,
-  Trophy,
   User,
-  Hash,
+  PhoneCallIcon,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -14,9 +13,9 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { label: "Home",     icon: Home,          href: "/"         },
-  { label: "Numbers",  icon: Hash,          href: "/numbers"  },
+  { label: "Numbers",  icon: PhoneCallIcon, href: "/numbers"  },
   { label: "Wallet",   icon: Wallet,        href: "/wallet"   },
-  { label: "Transactions", icon: MessageCircle, href: "/transactions" },
+  { label: "Transactions", icon: History, href: "/transactions" },
   { label: "Profile",  icon: User,          href: "/profile"  },
 ];
 

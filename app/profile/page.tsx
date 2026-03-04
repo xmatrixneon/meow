@@ -6,9 +6,20 @@ import type { User } from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  User as UserIcon, Mail, Wallet, HelpCircle, FileText,
-  ChevronRight, Copy, CheckCheck, ExternalLink, Sparkles,
-  IndianRupee, TrendingDown, TrendingUp,
+  User as UserIcon,
+  Mail,
+  Wallet,
+  HelpCircle,
+  FileText,
+  ChevronRight,
+  Copy,
+  CheckCheck,
+  ExternalLink,
+  Sparkles,
+  IndianRupee,
+  TrendingDown,
+  TrendingUp,
+  BadgeCheck,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -29,7 +40,13 @@ function SectionLabel({ label }: { label: string }) {
 }
 
 function SettingsRow({
-  icon: Icon, iconColor, label, value, onClick, danger, trailing,
+  icon: Icon,
+  iconColor,
+  label,
+  value,
+  onClick,
+  danger,
+  trailing,
 }: {
   icon: React.ElementType;
   iconColor?: string;
@@ -47,25 +64,52 @@ function SettingsRow({
       className={cn(
         "w-full flex items-center gap-3.5 px-4 py-3.5 text-left",
         "hover:bg-muted/50 transition-colors duration-150",
-        danger && "hover:bg-destructive/5"
+        danger && "hover:bg-destructive/5",
       )}
     >
-      <div className={cn(
-        "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
-        danger ? "bg-destructive/10" : "bg-primary/10 dark:bg-primary/15"
-      )}>
-        <Icon size={16} strokeWidth={2} className={danger ? "text-destructive" : (iconColor ?? "text-primary")} />
+      <div
+        className={cn(
+          "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
+          danger ? "bg-destructive/10" : "bg-primary/10 dark:bg-primary/15",
+        )}
+      >
+        <Icon
+          size={16}
+          strokeWidth={2}
+          className={
+            danger ? "text-destructive" : (iconColor ?? "text-primary")
+          }
+        />
       </div>
-      <span className={cn("flex-1 text-sm font-medium", danger ? "text-destructive" : "text-foreground")}>
+      <span
+        className={cn(
+          "flex-1 text-sm font-medium",
+          danger ? "text-destructive" : "text-foreground",
+        )}
+      >
         {label}
       </span>
-      {value && <span className="text-xs text-muted-foreground mr-1">{value}</span>}
-      {trailing ?? <ChevronRight size={15} strokeWidth={2.5} className="text-muted-foreground/50 shrink-0" />}
+      {value && (
+        <span className="text-xs text-muted-foreground mr-1">{value}</span>
+      )}
+      {trailing ?? (
+        <ChevronRight
+          size={15}
+          strokeWidth={2.5}
+          className="text-muted-foreground/50 shrink-0"
+        />
+      )}
     </motion.button>
   );
 }
 
-function SettingsCard({ children, delay }: { children: React.ReactNode; delay?: number }) {
+function SettingsCard({
+  children,
+  delay,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+}) {
   return (
     <motion.div
       {...fadeUp(delay ?? 0)}
@@ -76,11 +120,21 @@ function SettingsCard({ children, delay }: { children: React.ReactNode; delay?: 
   );
 }
 
-function StatPill({ value, label, accent }: { value: string; label: string; accent: string }) {
+function StatPill({
+  value,
+  label,
+  accent,
+}: {
+  value: string;
+  label: string;
+  accent: string;
+}) {
   return (
     <div className="flex flex-col items-center gap-0.5 flex-1">
       <p className={cn("text-lg font-bold tabular-nums", accent)}>{value}</p>
-      <p className="text-[10px] text-muted-foreground text-center leading-tight">{label}</p>
+      <p className="text-[10px] text-muted-foreground text-center leading-tight">
+        {label}
+      </p>
     </div>
   );
 }
@@ -157,7 +211,12 @@ export default function ProfilePage() {
     "User";
 
   const avatarUrl = user?.photoUrl ?? user?.image ?? null;
-  const initials = displayName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   const handleCopyId = () => {
     if (user?.telegramId) {
@@ -167,10 +226,9 @@ export default function ProfilePage() {
     }
   };
 
-  // Real statistics from wallet
-  const totalSpent = walletData?.totalSpent || 0;
-  const totalRecharge = walletData?.totalRecharge || 0;
-  const balance = walletData?.balance || 0;
+  const balance = Number(walletData?.balance ?? 0);
+  const totalSpent = Number(walletData?.totalSpent ?? 0);
+  const totalRecharge = Number(walletData?.totalRecharge ?? 0);
 
   // ── Skeleton
   if (isPending && !user) return <ProfileSkeleton />;
@@ -189,7 +247,9 @@ export default function ProfilePage() {
             <HelpCircle size={24} className="text-destructive" />
           </div>
           <p className="font-semibold text-foreground mb-1">Not available</p>
-          <p className="text-sm text-muted-foreground">Open this app inside Telegram to continue.</p>
+          <p className="text-sm text-muted-foreground">
+            Open this app inside Telegram to continue.
+          </p>
         </motion.div>
       </div>
     );
@@ -198,7 +258,6 @@ export default function ProfilePage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-
         {/* Avatar Hero */}
         <motion.div
           {...fadeUp(0)}
@@ -209,7 +268,11 @@ export default function ProfilePage() {
           <div className="relative flex items-center gap-4">
             <div className="relative shrink-0">
               {avatarUrl ? (
-                <img src={avatarUrl} alt={displayName} className="w-20 h-20 rounded-2xl object-cover border-2 border-primary/30 shadow-lg" />
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="w-20 h-20 rounded-2xl object-cover border-2 border-primary/30 shadow-lg"
+                />
               ) : (
                 <div className="w-20 h-20 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold border-2 border-primary/30 shadow-lg">
                   {initials}
@@ -218,12 +281,19 @@ export default function ProfilePage() {
               <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-card shadow-sm" />
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-foreground truncate leading-tight">{displayName}</h1>
+              <h1 className="text-xl font-bold text-foreground truncate leading-tight flex items-center gap-1.5">
+                {displayName}
+                <BadgeCheck size={18} className="text-blue-500 shrink-0" />
+              </h1>
               {user.telegramUsername && (
-                <p className="text-sm text-primary font-medium mt-0.5">@{user.telegramUsername}</p>
+                <p className="text-sm text-primary font-medium mt-0.5">
+                  @{user.telegramUsername}
+                </p>
               )}
               {user.email && (
-                <p className="text-xs text-muted-foreground mt-1 truncate">{user.email}</p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">
+                  {user.email}
+                </p>
               )}
               {user.isPremium && (
                 <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-semibold text-amber-500">
@@ -238,39 +308,60 @@ export default function ProfilePage() {
                   className={cn(
                     "mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full",
                     "bg-card/80 border border-border text-xs text-muted-foreground",
-                    "hover:border-primary/40 transition-colors duration-150"
+                    "hover:border-primary/40 transition-colors duration-150",
                   )}
                 >
-                  {copied ? <CheckCheck size={11} className="text-green-500" /> : <Copy size={11} />}
+                  {copied ? (
+                    <CheckCheck size={11} className="text-green-500" />
+                  ) : (
+                    <Copy size={11} />
+                  )}
                   <span className="font-mono">ID: {user.telegramId}</span>
                 </button>
               )}
             </div>
           </div>
-          <div className="relative mt-5 pt-4 border-t border-primary/15 flex flex-wrap gap-4">
-            <div className="flex items-center gap-2.5 min-w-[100px] flex-1">
-              <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
-                <TrendingDown size={12} className="text-rose-500" />
+          <div className="relative mt-5 pt-4 border-t border-primary/15 grid grid-cols-3 gap-2">
+            {/* Total Spent */}
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
+                <TrendingDown size={15} className="text-rose-500" />
               </div>
-              <div className="flex flex-col gap-0.5">
-                <p className="text-[10px] text-muted-foreground">Total Spent</p>
-                <p className="text-sm font-bold text-rose-500 tabular-nums flex items-center gap-0.5">
-                  <IndianRupee size={10} strokeWidth={2.5} />
-                  {totalSpent.toFixed(2)}
-                </p>
-              </div>
+              <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                Spent
+              </p>
+              <p className="text-sm font-bold text-rose-500 tabular-nums flex items-center gap-0">
+                <IndianRupee size={11} strokeWidth={2.5} />
+                {totalSpent.toFixed(2)}
+              </p>
             </div>
-            <div className="flex items-center gap-2.5 min-w-[100px] flex-1">
-              <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
-                <TrendingUp size={12} className="text-green-500" />
+
+            {/* Balance */}
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Wallet size={15} className="text-primary" />
               </div>
-              <div className="flex flex-col gap-0.5">
-                <p className="text-[10px] text-muted-foreground">Total Recharge</p>
-                <p className="text-sm font-bold text-green-500 tabular-nums flex items-center gap-0.5">
-                  <IndianRupee size={10} strokeWidth={2.5} />
-                  {totalRecharge.toFixed(2)}
-                </p>
+              <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                Balance
+              </p>
+              <p className="text-sm font-bold text-primary tabular-nums flex items-center gap-0">
+                <IndianRupee size={11} strokeWidth={2.5} />
+                {balance.toFixed(2)}
+              </p>
+            </div>
+
+            {/* Total Recharge */}
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                <TrendingUp size={15} className="text-green-500" />
               </div>
+              <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                Recharge
+              </p>
+              <p className="text-sm font-bold text-green-500 tabular-nums flex items-center gap-0">
+                <IndianRupee size={11} strokeWidth={2.5} />
+                {totalRecharge.toFixed(2)}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -279,11 +370,20 @@ export default function ProfilePage() {
         <div>
           <SectionLabel label="Support" />
           <SettingsCard delay={0.2}>
-            <SettingsRow icon={HelpCircle} label="Help & FAQ" onClick={() => router.push("/help")} />
+            <SettingsRow
+              icon={HelpCircle}
+              label="Help & FAQ"
+              onClick={() => router.push("/help")}
+            />
             <SettingsRow
               icon={FileText}
               label="Terms & Privacy"
-              trailing={<ExternalLink size={14} className="text-muted-foreground/50 shrink-0" />}
+              trailing={
+                <ExternalLink
+                  size={14}
+                  className="text-muted-foreground/50 shrink-0"
+                />
+              }
               onClick={() => window.open("https://meowsms.com/legal", "_blank")}
             />
           </SettingsCard>

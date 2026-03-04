@@ -6,8 +6,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { User } from "@/types";
 import {
   ChevronRight,
-  ArrowDownLeft, History, Sparkles, Zap,
-  Gift, IndianRupee, CheckCircle2, Bolt, CreditCard, TrendingDown,
+  ArrowDownLeft,
+  History,
+  Sparkles,
+  Zap,
+  Gift,
+  IndianRupee,
+  CheckCircle2,
+  CreditCard,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
   IndianRupeeIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -25,8 +34,16 @@ const fadeUp = (delay = 0) => ({
 });
 
 const transactionIcons = {
-  DEPOSIT: { icon: ArrowDownLeft, color: "text-green-500", bg: "bg-green-500/10" },
-  PURCHASE: { icon: CreditCard, color: "text-amber-500", bg: "bg-amber-500/10" },
+  DEPOSIT: {
+    icon: ArrowDownLeft,
+    color: "text-green-500",
+    bg: "bg-green-500/10",
+  },
+  PURCHASE: {
+    icon: CreditCard,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+  },
   REFUND: { icon: TrendingDown, color: "text-sky-500", bg: "bg-sky-500/10" },
   PROMO: { icon: Gift, color: "text-violet-500", bg: "bg-violet-500/10" },
   REFERRAL: { icon: Sparkles, color: "text-pink-500", bg: "bg-pink-500/10" },
@@ -60,7 +77,12 @@ function ActionRow({
       onClick={onClick}
       className="w-full flex items-center gap-3.5 px-4 py-3.5 hover:bg-muted/50 transition-colors duration-150 text-left group"
     >
-      <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", iconBg)}>
+      <div
+        className={cn(
+          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+          iconBg,
+        )}
+      >
         <Icon size={16} strokeWidth={2} className={iconColor} />
       </div>
       <div className="flex-1 min-w-0">
@@ -81,32 +103,6 @@ function ActionRow({
   );
 }
 
-function StatCard({
-  icon: Icon,
-  iconColor,
-  iconBg,
-  label,
-  value,
-  valueColor,
-}: {
-  icon: React.ElementType;
-  iconColor: string;
-  iconBg: string;
-  label: string;
-  value: string;
-  valueColor: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5 bg-card/60 border border-border rounded-2xl px-3 py-2.5">
-      <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", iconBg)}>
-        <Icon size={13} className={iconColor} />
-      </div>
-      <p className={cn("text-base font-bold tabular-nums", valueColor)}>{value}</p>
-      <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
-    </div>
-  );
-}
-
 function WalletSkeleton() {
   return (
     <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
@@ -117,15 +113,15 @@ function WalletSkeleton() {
           <Skeleton className="h-4 w-16 mb-1" />
         </div>
         <Skeleton className="h-3 w-36" />
-        <div className="pt-4 border-t border-border grid grid-cols-3 gap-2.5">
+        <div className="pt-4 border-t border-border grid grid-cols-3 gap-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 rounded-2xl" />
+            <div key={i} className="flex flex-col items-center gap-1.5">
+              <Skeleton className="w-9 h-9 rounded-lg" />
+              <Skeleton className="h-2.5 w-12" />
+              <Skeleton className="h-4 w-14" />
+            </div>
           ))}
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Skeleton className="h-20 rounded-2xl" />
-        <Skeleton className="h-20 rounded-2xl" />
       </div>
       <div className="space-y-2">
         <Skeleton className="h-3 w-16" />
@@ -153,18 +149,23 @@ export default function WalletPage() {
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user as User | undefined;
 
-  // tRPC queries
-  const { data: walletData, refetch: refetchWallet } = trpc.wallet.balance.useQuery(undefined, {
-    staleTime: 0,
-    refetchInterval: 60000,
+  const { data: walletData, refetch: refetchWallet } =
+    trpc.wallet.balance.useQuery(undefined, {
+      staleTime: 0,
+      refetchInterval: 60000,
+    });
+  const { data: transactionsData } = trpc.wallet.transactions.useQuery({
+    limit: 10,
   });
-  const { data: transactionsData } = trpc.wallet.transactions.useQuery({ limit: 10 });
   const { data: settings } = trpc.service.settings.useQuery();
 
-  const balance = walletData?.balance || 0;
-  // Filter out PURCHASE transactions - wallet page should only show wallet-related transactions (UPI, Promo, etc.)
-  const transactions = transactionsData?.transactions?.filter(tx => tx.type !== "PURCHASE") || [];
-  const currency = settings?.currency || "INR";
+  const balance = Number(walletData?.balance ?? 0);
+  const totalSpent = Number(walletData?.totalSpent ?? 0);
+  const totalRecharge = Number(walletData?.totalRecharge ?? 0);
+
+  const transactions =
+    transactionsData?.transactions?.filter((tx) => tx.type !== "PURCHASE") ||
+    [];
 
   const handleNav = useCallback((href: string) => router.push(href), [router]);
 
@@ -194,8 +195,7 @@ export default function WalletPage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-
-        {/* ── Balance hero ──────────────────────────────────────────────────── */}
+        {/* ── Balance hero ── */}
         <motion.div
           {...fadeUp(0)}
           className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-5"
@@ -205,25 +205,71 @@ export default function WalletPage() {
 
           <div className="relative">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 mb-3">
-              Balance
+              Wallet
             </p>
             <div className="flex items-end gap-2 mb-1">
-              <IndianRupee size={32} className="text-primary" strokeWidth={2.5} />
+              <IndianRupee
+                size={32}
+                className="text-primary"
+                strokeWidth={2.5}
+              />
               <h1 className="text-4xl font-bold text-foreground tabular-nums tracking-tight">
-                {Number(balance ?? 0).toFixed(2)}
+                {Number(balance).toFixed(2)}
               </h1>
               <span className="text-sm text-muted-foreground mb-1">INR</span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 mb-5">
               <CheckCircle2 size={12} className="text-green-500" />
-              <p className="text-xs text-muted-foreground">MeowSMS Wallet · Active</p>
+              <p className="text-xs text-muted-foreground">
+                MeowSMS Wallet · Active
+              </p>
+            </div>
+
+            {/* Stats grid — identical to profile */}
+            <div className="pt-4 border-t border-primary/15 grid grid-cols-3 gap-2">
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
+                  <TrendingDown size={15} className="text-rose-500" />
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  Spent
+                </p>
+                <p className="text-sm font-bold text-rose-500 tabular-nums flex items-center gap-0">
+                  <IndianRupee size={11} strokeWidth={2.5} />
+                  {Number(totalSpent).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Wallet size={15} className="text-primary" />
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  Balance
+                </p>
+                <p className="text-sm font-bold text-primary tabular-nums flex items-center gap-0">
+                  <IndianRupee size={11} strokeWidth={2.5} />
+                  {Number(balance).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                  <TrendingUp size={15} className="text-green-500" />
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  Recharge
+                </p>
+                <p className="text-sm font-bold text-green-500 tabular-nums flex items-center gap-0">
+                  <IndianRupee size={11} strokeWidth={2.5} />
+                  {Number(totalRecharge).toFixed(2)}
+                </p>
+              </div>
             </div>
           </div>
-
-
         </motion.div>
 
-        {/* ── Manage ───────────────────────────────────────────────────────── */}
+        {/* ── Manage ── */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 px-1 mb-2">
             Manage
@@ -262,8 +308,8 @@ export default function WalletPage() {
           </motion.div>
         </div>
 
-        {/* ── Transaction History ───────────────────────────────────────────── */}
-        <motion.div {...fadeUp(0.2)} className="mt-5">
+        {/* ── Recent Transactions ── */}
+        <motion.div {...fadeUp(0.2)}>
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 px-1 mb-2">
             Recent Transactions
           </p>
@@ -271,13 +317,23 @@ export default function WalletPage() {
             {transactions.length === 0 ? (
               <div className="flex flex-col items-center py-8 gap-2">
                 <History size={20} className="text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No transactions yet</p>
+                <p className="text-sm text-muted-foreground">
+                  No transactions yet
+                </p>
               </div>
             ) : (
               transactions.map((tx, i) => {
-                const config = transactionIcons[tx.type] || transactionIcons.DEPOSIT;
+                const config =
+                  transactionIcons[tx.type as keyof typeof transactionIcons] ||
+                  transactionIcons.DEPOSIT;
                 const Icon = config.icon;
-                const isCredit = ["DEPOSIT", "PROMO", "REFERRAL", "REFUND", "ADJUSTMENT"].includes(tx.type);
+                const isCredit = [
+                  "DEPOSIT",
+                  "PROMO",
+                  "REFERRAL",
+                  "REFUND",
+                  "ADJUSTMENT",
+                ].includes(tx.type);
 
                 return (
                   <motion.div
@@ -287,19 +343,31 @@ export default function WalletPage() {
                     transition={{ delay: i * 0.05 }}
                     className="flex items-center gap-3.5 px-4 py-3.5"
                   >
-                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", config.bg)}>
+                    <div
+                      className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+                        config.bg,
+                      )}
+                    >
                       <Icon size={16} className={config.color} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-foreground">{tx.type}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {tx.description || formatDistanceToNow(new Date(tx.createdAt), { addSuffix: true })}
+                      <p className="font-semibold text-sm text-foreground capitalize">
+                        {tx.type.toLowerCase()}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {tx.description ||
+                          formatDistanceToNow(new Date(tx.createdAt), {
+                            addSuffix: true,
+                          })}
                       </p>
                     </div>
-                    <p className={cn(
-                      "font-bold text-sm tabular-nums flex items-center gap-0.5",
-                      isCredit ? "text-green-500" : "text-amber-500"
-                    )}>
+                    <p
+                      className={cn(
+                        "font-bold text-sm tabular-nums flex items-center gap-0.5 shrink-0",
+                        isCredit ? "text-green-500" : "text-amber-500",
+                      )}
+                    >
                       {isCredit ? "+" : "-"}
                       <IndianRupee size={12} strokeWidth={2.5} />
                       {Math.abs(Number(tx.amount)).toFixed(2)}
@@ -311,7 +379,7 @@ export default function WalletPage() {
           </div>
         </motion.div>
 
-        {/* ── Coming soon ───────────────────────────────────────────────────── */}
+        {/* ── Coming soon ── */}
         <motion.div
           {...fadeUp(0.26)}
           className="flex items-center gap-3 px-4 py-3.5 bg-card border border-border rounded-2xl"
@@ -320,17 +388,19 @@ export default function WalletPage() {
             <Sparkles size={16} className="text-amber-500" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">More features coming soon</p>
-            <p className="text-xs text-muted-foreground">Auto top-up, spending limits & more</p>
+            <p className="text-sm font-semibold text-foreground">
+              More features coming soon
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Auto top-up, spending limits & more
+            </p>
           </div>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 shrink-0">
             Soon
           </span>
         </motion.div>
-
       </div>
 
-      {/* Dialogs */}
       <DepositDialog
         open={depositOpen}
         onOpenChange={setDepositOpen}

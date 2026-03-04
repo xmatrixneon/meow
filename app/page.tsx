@@ -22,6 +22,7 @@ import {
   Clock,
   IndianRupee,
   Phone,
+  PersonStanding,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -489,14 +490,10 @@ export default function MiniAppPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">Welcome back</p>
+              
               <h1 className="text-lg font-bold text-foreground truncate">
-                {displayName} 👋
+                {displayName}
               </h1>
-              {user.telegramUsername && (
-                <p className="text-xs text-primary font-medium">
-                  @{user.telegramUsername}
-                </p>
-              )}
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0">
               <div className="flex items-center gap-1">
@@ -506,10 +503,7 @@ export default function MiniAppPage() {
                   {Number(walletData?.balance ?? 0).toFixed(2)}
                 </span>
               </div>
-              <div className="flex items-center gap-1">
-                <Star size={11} className="text-amber-500" />
-                <span className="text-xs font-bold text-amber-500">0 pts</span>
-              </div>
+             
             </div>
           </div>
         </motion.div>

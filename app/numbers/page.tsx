@@ -97,13 +97,14 @@ function getFlagEmoji(iso: string): string {
     ...iso
       .toUpperCase()
       .split("")
-      .map((c) => 127397 + c.charCodeAt(0))
+      .map((c) => 127397 + c.charCodeAt(0)),
   );
 }
 
-function parseSmsContent(
-  raw: unknown
-): { smsList?: SmsEntry[]; displaySms?: string } {
+function parseSmsContent(raw: unknown): {
+  smsList?: SmsEntry[];
+  displaySms?: string;
+} {
   if (!raw) return {};
   if (Array.isArray(raw) && raw.length > 0) {
     const smsList = raw as SmsEntry[];
@@ -125,7 +126,7 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         "ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
         active
           ? "bg-primary-foreground/20 text-primary-foreground"
-          : "bg-muted text-muted-foreground"
+          : "bg-muted text-muted-foreground",
       )}
     >
       {count}
@@ -133,13 +134,7 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-function SmsItem({
-  sms,
-  index,
-}: {
-  sms: SmsEntry;
-  index: number;
-}) {
+function SmsItem({ sms, index }: { sms: SmsEntry; index: number }) {
   const [copied, setCopied] = useState(false);
   const otp = sms.content.match(/\b\d{4,8}\b/)?.[0];
 
@@ -159,7 +154,7 @@ function SmsItem({
         "rounded-xl p-3 border",
         index === 0
           ? "bg-green-500/10 border-green-500/30"
-          : "bg-muted/30 border-border"
+          : "bg-muted/30 border-border",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -181,7 +176,7 @@ function SmsItem({
               "flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors shrink-0",
               copied
                 ? "bg-green-500 text-white"
-                : "bg-green-500/15 text-green-500 hover:bg-green-500/25"
+                : "bg-green-500/15 text-green-500 hover:bg-green-500/25",
             )}
           >
             {copied ? <CheckCheck size={11} /> : <Copy size={11} />}
@@ -240,7 +235,9 @@ function SmsList({
         {code && (
           <div className="mt-2 flex items-center justify-between">
             <div>
-              <p className="text-[10px] text-muted-foreground mb-0.5">OTP Code</p>
+              <p className="text-[10px] text-muted-foreground mb-0.5">
+                OTP Code
+              </p>
               <p className="text-xl font-bold font-mono tracking-[0.2em] text-green-500">
                 {code}
               </p>
@@ -253,7 +250,7 @@ function SmsList({
                 "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors",
                 codeCopied
                   ? "bg-green-500 text-white"
-                  : "bg-green-500/15 text-green-500 hover:bg-green-500/25"
+                  : "bg-green-500/15 text-green-500 hover:bg-green-500/25",
               )}
             >
               {codeCopied ? <CheckCheck size={13} /> : <Copy size={13} />}
@@ -274,7 +271,9 @@ function SmsList({
       >
         <div className="flex items-center gap-2">
           <MessageSquare size={12} className="text-green-500" />
-          <span className="text-xs font-semibold">{smsList.length} SMS received</span>
+          <span className="text-xs font-semibold">
+            {smsList.length} SMS received
+          </span>
         </div>
         <motion.div
           animate={{ rotate: showAll ? 90 : 0 }}
@@ -304,7 +303,9 @@ function SmsList({
         <div className="flex items-center justify-between px-3 py-2 bg-green-500/5 border border-green-500/15 rounded-xl">
           <div>
             <p className="text-[10px] text-muted-foreground">Latest OTP</p>
-            <p className="text-lg font-bold font-mono tracking-[0.2em] text-green-500">{code}</p>
+            <p className="text-lg font-bold font-mono tracking-[0.2em] text-green-500">
+              {code}
+            </p>
           </div>
           <motion.button
             whileTap={{ scale: 0.93 }}
@@ -314,7 +315,7 @@ function SmsList({
               "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors",
               codeCopied
                 ? "bg-green-500 text-white"
-                : "bg-green-500/15 text-green-500 hover:bg-green-500/25"
+                : "bg-green-500/15 text-green-500 hover:bg-green-500/25",
             )}
           >
             {codeCopied ? <CheckCheck size={13} /> : <Copy size={13} />}
@@ -342,15 +343,19 @@ function NumberCard({
   buyingNextNumberId?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
-  const [expiresIn, setExpiresIn] = useState(() => formatTimeRemaining(item.expiresAt));
+  const [expiresIn, setExpiresIn] = useState(() =>
+    formatTimeRemaining(item.expiresAt),
+  );
   const [cancelRemainingMs, setCancelRemainingMs] = useState(() =>
-    Math.max(0, minCancelMs - (Date.now() - item.buyTime.getTime()))
+    Math.max(0, minCancelMs - (Date.now() - item.buyTime.getTime())),
   );
 
   useEffect(() => {
     const interval = setInterval(() => {
       setExpiresIn(formatTimeRemaining(item.expiresAt));
-      setCancelRemainingMs(Math.max(0, minCancelMs - (Date.now() - item.buyTime.getTime())));
+      setCancelRemainingMs(
+        Math.max(0, minCancelMs - (Date.now() - item.buyTime.getTime())),
+      );
     }, 1000);
     return () => clearInterval(interval);
   }, [item.expiresAt, item.buyTime, minCancelMs]);
@@ -360,7 +365,11 @@ function NumberCard({
   const isCancelled = item.status === "cancelled";
   const canCancel = cancelRemainingMs === 0;
 
-  const displayStatus: TabValue = isReceived ? "received" : isCancelled ? "cancelled" : "waiting";
+  const displayStatus: TabValue = isReceived
+    ? "received"
+    : isCancelled
+      ? "cancelled"
+      : "waiting";
 
   const statusColors = {
     received: {
@@ -386,7 +395,11 @@ function NumberCard({
     },
   }[displayStatus];
 
-  const statusLabel = { received: "Received", cancelled: "Cancelled", waiting: "Waiting" }[displayStatus];
+  const statusLabel = {
+    received: "Received",
+    cancelled: "Cancelled",
+    waiting: "Waiting",
+  }[displayStatus];
 
   return (
     <motion.div
@@ -394,7 +407,10 @@ function NumberCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ type: "spring", stiffness: 280, damping: 24, delay }}
-      className={cn("bg-card border rounded-2xl overflow-hidden", statusColors.border)}
+      className={cn(
+        "bg-card border rounded-2xl overflow-hidden",
+        statusColors.border,
+      )}
     >
       {/* Header */}
       <div className="px-4 pt-4 pb-3 flex items-start gap-3">
@@ -418,25 +434,39 @@ function NumberCard({
           <span
             className={cn(
               "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-card",
-              statusColors.dot
+              statusColors.dot,
             )}
           />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-sm font-mono tracking-tight">{item.number}</span>
-            <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", statusColors.badge)}>
+            <span className="font-bold text-sm font-mono tracking-tight">
+              {item.number}
+            </span>
+            <span
+              className={cn(
+                "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                statusColors.badge,
+              )}
+            >
               {statusLabel}
             </span>
           </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <MessageSquare size={10} className="text-muted-foreground shrink-0" />
-            <span className="text-xs text-muted-foreground">{item.service}</span>
+            <MessageSquare
+              size={10}
+              className="text-muted-foreground shrink-0"
+            />
+            <span className="text-xs text-muted-foreground">
+              {item.service}
+            </span>
             {item.country && item.country !== "Unknown" && (
               <>
                 <span className="text-muted-foreground/40">•</span>
-                <span className="text-xs text-muted-foreground">{item.country}</span>
+                <span className="text-xs text-muted-foreground">
+                  {item.country}
+                </span>
               </>
             )}
           </div>
@@ -445,7 +475,12 @@ function NumberCard({
         {!isCancelled && (
           <div className="flex items-center gap-1 shrink-0">
             <Timer size={12} className={statusColors.timerIcon} />
-            <span className={cn("text-xs font-mono font-bold tabular-nums", statusColors.timer)}>
+            <span
+              className={cn(
+                "text-xs font-mono font-bold tabular-nums",
+                statusColors.timer,
+              )}
+            >
               {expiresIn}
             </span>
           </div>
@@ -485,7 +520,7 @@ function NumberCard({
             "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors",
             copied
               ? "bg-primary text-primary-foreground"
-              : "bg-primary/10 text-primary hover:bg-primary/20"
+              : "bg-primary/10 text-primary hover:bg-primary/20",
           )}
         >
           {copied ? <CheckCheck size={13} /> : <Copy size={13} />}
@@ -496,7 +531,9 @@ function NumberCard({
           <motion.button
             whileTap={{ scale: 0.96 }}
             type="button"
-            onClick={() => onNextNumber(item.serviceId!, item.serverId!, item.orderId)}
+            onClick={() =>
+              onNextNumber(item.serviceId!, item.serverId!, item.orderId)
+            }
             disabled={buyingNextNumberId !== null}
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
           >
@@ -515,8 +552,10 @@ function NumberCard({
           </motion.button>
         )}
 
-        {displayStatus === "waiting" && !isReceived && onCancel && (
-          canCancel ? (
+        {displayStatus === "waiting" &&
+          !isReceived &&
+          onCancel &&
+          (canCancel ? (
             <motion.button
               whileTap={{ scale: 0.96 }}
               type="button"
@@ -536,13 +575,14 @@ function NumberCard({
                 <TooltipContent>
                   <div className="flex items-center gap-1.5">
                     <AlertCircle size={12} />
-                    <span>Cancel in {formatCancelCountdown(cancelRemainingMs)}</span>
+                    <span>
+                      Cancel in {formatCancelCountdown(cancelRemainingMs)}
+                    </span>
                   </div>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )
-        )}
+          ))}
       </div>
     </motion.div>
   );
@@ -558,7 +598,9 @@ const TABS: { label: string; value: TabValue; icon: React.ElementType }[] = [
 
 export default function NumbersPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("waiting");
-  const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(null);
+  const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(
+    null,
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   const [prevSmsCount, setPrevSmsCount] = useState(0);
 
@@ -582,7 +624,7 @@ export default function NumbersPage() {
     hasNextPage: hasMoreReceived,
   } = trpc.number.getReceivedInfinite.useInfiniteQuery(
     { limit: 20 },
-    { getNextPageParam: (p: any) => p.nextCursor, staleTime: 60_000 }
+    { getNextPageParam: (p: any) => p.nextCursor, staleTime: 60_000 },
   );
 
   const {
@@ -591,7 +633,7 @@ export default function NumbersPage() {
     hasNextPage: hasMoreCancelled,
   } = trpc.number.getCancelledInfinite.useInfiniteQuery(
     { limit: 20 },
-    { getNextPageParam: (p: any) => p.nextCursor, staleTime: 60_000 }
+    { getNextPageParam: (p: any) => p.nextCursor, staleTime: 60_000 },
   );
 
   const { data: settingsData } = trpc.service.settings.useQuery();
@@ -763,7 +805,7 @@ export default function NumbersPage() {
 
   const handleCancel = useCallback(
     (orderId: string) => cancelMutation.mutate({ orderId }),
-    [cancelMutation]
+    [cancelMutation],
   );
 
   const handleNextNumber = useCallback(
@@ -771,7 +813,7 @@ export default function NumbersPage() {
       setBuyingNextNumberId(orderId);
       buyNextMutation.mutate({ serviceId, serverId });
     },
-    [buyNextMutation]
+    [buyNextMutation],
   );
 
   const handleLoadMore = async () => {
@@ -796,46 +838,71 @@ export default function NumbersPage() {
     activeTab === "waiting"
       ? numbers
       : activeTab === "received"
-      ? receivedNumbers
-      : cancelledNumbers;
+        ? receivedNumbers
+        : cancelledNumbers;
 
   const hasMore =
     activeTab === "received"
       ? hasMoreReceived
       : activeTab === "cancelled"
-      ? hasMoreCancelled
-      : false;
+        ? hasMoreCancelled
+        : false;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-
         {/* Stats */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 280, damping: 24 }}
-          className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-6 py-5"
+          className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-5"
         >
-          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4 relative">
+          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
+          <p className="relative text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 mb-4">
             Temp Numbers
           </p>
           <div className="relative grid grid-cols-3 gap-2">
             {[
-              { icon: Clock, color: "text-amber-400", value: counts.waiting, label: "Waiting" },
-              { icon: CheckCheck, color: "text-green-500", value: counts.received, label: "Received" },
-              { icon: Trash2, color: "text-destructive", value: counts.cancelled, label: "Cancelled" },
-            ].map(({ icon: Icon, color, value, label }) => (
-              <div
-                key={label}
-                className="flex flex-col items-center justify-center gap-1.5 bg-card/60 border border-border rounded-2xl px-2 py-3"
-              >
-                <Icon size={16} className={color} />
-                <p className={cn("text-lg font-bold tabular-nums", color)}>{value}</p>
-                <p className="text-[10px] text-muted-foreground">{label}</p>
+              {
+                icon: Clock,
+                color: "text-amber-400",
+                bg: "bg-amber-400/10",
+                value: counts.waiting,
+                label: "Waiting",
+              },
+              {
+                icon: CheckCheck,
+                color: "text-green-500",
+                bg: "bg-green-500/10",
+                value: counts.received,
+                label: "Received",
+              },
+              {
+                icon: Trash2,
+                color: "text-destructive",
+                bg: "bg-destructive/10",
+                value: counts.cancelled,
+                label: "Cancelled",
+              },
+            ].map(({ icon: Icon, color, bg, value, label }) => (
+              <div key={label} className="flex flex-col items-center gap-1.5">
+                <div
+                  className={cn(
+                    "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                    bg,
+                  )}
+                >
+                  <Icon size={15} className={color} />
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  {label}
+                </p>
+                <p className={cn("text-sm font-bold tabular-nums", color)}>
+                  {value}
+                </p>
               </div>
             ))}
           </div>
@@ -845,7 +912,12 @@ export default function NumbersPage() {
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 280, damping: 24, delay: 0.06 }}
+          transition={{
+            type: "spring",
+            stiffness: 280,
+            damping: 24,
+            delay: 0.06,
+          }}
           className="bg-card border border-border rounded-2xl p-1.5 flex gap-1"
         >
           {TABS.map((tab) => {
@@ -860,7 +932,7 @@ export default function NumbersPage() {
                   "relative flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-colors duration-200",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                 )}
               >
                 {isActive && (
@@ -890,9 +962,14 @@ export default function NumbersPage() {
           </div>
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold">Get New Number</p>
-            <p className="text-xs text-muted-foreground">Browse available numbers by country</p>
+            <p className="text-xs text-muted-foreground">
+              Browse available numbers by country
+            </p>
           </div>
-          <ChevronRight size={15} className="text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
+          <ChevronRight
+            size={15}
+            className="text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0"
+          />
         </Link>
 
         {/* Number list */}
@@ -914,8 +991,8 @@ export default function NumbersPage() {
                 {activeTab === "waiting"
                   ? "No numbers waiting. Get a new number to start receiving OTP codes."
                   : activeTab === "received"
-                  ? "No received numbers yet. Successfully received SMS will appear here."
-                  : "No cancelled numbers yet. Cancelled orders and refunds will appear here."}
+                    ? "No received numbers yet. Successfully received SMS will appear here."
+                    : "No cancelled numbers yet. Cancelled orders and refunds will appear here."}
               </p>
             </motion.div>
           ) : (
@@ -944,7 +1021,11 @@ export default function NumbersPage() {
                     <div className="flex items-center justify-center gap-2">
                       <motion.div
                         animate={{ rotate: 360 }}
-                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
                         className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
                       />
                       Loading…
@@ -957,7 +1038,6 @@ export default function NumbersPage() {
             </div>
           )}
         </AnimatePresence>
-
       </div>
     </div>
   );

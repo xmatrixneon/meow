@@ -8,28 +8,37 @@ import { TRPCProvider } from "@/lib/trpc";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: "MeowSMS",
   description: "Secure SMS service with Telegram authentication",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <TRPCProvider>
-          <TelegramAuthProvider>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <TelegramAuthProvider>
+          <TRPCProvider>
             <Navbar />
             <main className="pt-14 pb-16">{children}</main>
             <BottomNavBar />
             <Toaster position="top-center" />
-          </TelegramAuthProvider>
-        </TRPCProvider>
+          </TRPCProvider>
+        </TelegramAuthProvider>
       </body>
     </html>
   );
