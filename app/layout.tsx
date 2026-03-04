@@ -18,15 +18,18 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script src="https://telegram.org/js/telegram-web-app.js" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <TelegramAuthProvider>
-          <TRPCProvider>
+        <TRPCProvider>
+          <TelegramAuthProvider>
             <Navbar />
             <main className="pt-14 pb-16">{children}</main>
             <BottomNavBar />
             <Toaster position="top-center" />
-          </TRPCProvider>
-        </TelegramAuthProvider>
+          </TelegramAuthProvider>
+        </TRPCProvider>
       </body>
     </html>
   );

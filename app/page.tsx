@@ -21,6 +21,7 @@ import {
   Star,
   Clock,
   IndianRupee,
+  Phone,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -43,10 +44,6 @@ const fadeUp = (delay = 0) => ({
   transition: { type: "spring" as const, stiffness: 280, damping: 24, delay },
 });
 
-/**
- * Convert country ISO code to flag emoji
- * Example: "IN" -> "🇮🇳", "US" -> "🇺🇸"
- */
 function getCountryFlagEmoji(isoCode: string): string {
   if (!isoCode || isoCode.length !== 2) return "🌍";
   const codePoints = isoCode
@@ -88,7 +85,6 @@ interface ServerOption {
 function PageSkeleton() {
   return (
     <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-      {/* Hero card */}
       <div className="rounded-3xl border border-border px-5 py-5 flex items-center gap-3.5">
         <Skeleton className="w-14 h-14 rounded-xl shrink-0" />
         <div className="flex-1 space-y-2">
@@ -101,27 +97,15 @@ function PageSkeleton() {
           <Skeleton className="h-3 w-12" />
         </div>
       </div>
-
-      {/* Search */}
       <Skeleton className="h-11 w-full rounded-2xl" />
-
-      {/* Services grid */}
       <div className="space-y-3">
         <Skeleton className="h-3 w-28" />
-        <div className="grid grid-cols-4 gap-2.5">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex flex-col items-center gap-2 p-3 border border-border rounded-2xl"
-            >
-              <Skeleton className="w-12 h-12 rounded-xl" />
-              <Skeleton className="h-3 w-10" />
-            </div>
+        <div className="grid grid-cols-2 gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-2xl" />
           ))}
         </div>
       </div>
-
-      {/* Recent numbers */}
       <div className="border border-border rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <Skeleton className="h-4 w-32" />
@@ -137,7 +121,7 @@ function PageSkeleton() {
   );
 }
 
-// ─── service card ─────────────────────────────────────────────────────────────
+// ─── service card (horizontal pill) ──────────────────────────────────────────
 function ServiceCard({
   service,
   onClick,
@@ -149,20 +133,40 @@ function ServiceCard({
 }) {
   return (
     <motion.button
-      initial={{ opacity: 0, scale: 0.92 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring" as const, stiffness: 300, damping: 24, delay }}
-      whileTap={{ scale: 0.94 }}
+      whileTap={{ scale: 0.97 }}
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-2 p-3 bg-card border border-border rounded-2xl hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 group"
+      className={cn(
+        "flex items-center gap-2.5 px-3 py-2.5 w-full",
+        "bg-card border border-border rounded-2xl",
+        "hover:border-primary/40 hover:bg-primary/5",
+        "transition-all duration-200 group text-left"
+      )}
     >
-      <div className="w-12 h-12 rounded-xl bg-primary/10 dark:bg-primary/15 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform duration-200">
-        {service.emoji}
+      {/* Icon */}
+      <div className="w-8 h-8 rounded-xl bg-primary/10 dark:bg-primary/15 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors duration-200">
+        <Phone
+          size={14}
+          strokeWidth={2.2}
+          className="text-primary"
+        />
       </div>
-      <p className="text-xs font-semibold text-foreground text-center leading-tight truncate w-full">
+
+      {/* Name */}
+      <p className="flex-1 text-xs font-semibold text-foreground truncate leading-none">
         {service.name}
       </p>
+
+      {/* Price badge */}
+      <div className="flex items-center gap-0.5 bg-primary/8 border border-primary/15 rounded-lg px-2 py-1 shrink-0">
+        <IndianRupee size={10} className="text-primary" strokeWidth={2.5} />
+        <span className="text-[11px] font-bold text-primary tabular-nums leading-none">
+          {Number(service.emoji) || "—"}
+        </span>
+      </div>
     </motion.button>
   );
 }
@@ -232,7 +236,7 @@ function ServerCard({
           </div>
           <div>
             <p className="font-bold text-sm text-foreground">{server.name}</p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <IndianRupee size={12} className="text-primary" />
               <p className="text-xl font-bold text-primary tabular-nums">
                 {price.toFixed(2)}
@@ -362,7 +366,7 @@ export default function MiniAppPage() {
     servicesData?.services.map((s) => ({
       id: s.id,
       name: s.name,
-      emoji: s.iconUrl || "📱",
+      emoji: String(s.basePrice ?? ""),   // reuse emoji field to carry price for display
       category: "Service",
     })) || [];
 
@@ -559,7 +563,10 @@ export default function MiniAppPage() {
                     </p>
                   </motion.div>
                 ) : (
-                  <motion.div key="grid" className="grid grid-cols-4 gap-2.5">
+                  <motion.div
+                    key="grid"
+                    className="grid grid-cols-2 gap-2"
+                  >
                     {services.map((service, i) => (
                       <ServiceCard
                         key={service.id}
@@ -572,7 +579,7 @@ export default function MiniAppPage() {
                 )}
               </AnimatePresence>
 
-              {/* Load More inside scroll area */}
+              {/* Load More */}
               {servicesData?.hasMore && (
                 <div className="flex justify-center pt-4 pb-1">
                   <Button
@@ -628,8 +635,8 @@ export default function MiniAppPage() {
           <SheetHeader className="px-5 pt-2 pb-3 border-b border-border shrink-0">
             <SheetTitle className="flex items-center gap-2.5 text-left">
               {selected && (
-                <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-lg shrink-0">
-                  {selected.emoji}
+                <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Phone size={16} strokeWidth={2.2} className="text-primary" />
                 </span>
               )}
               <div>

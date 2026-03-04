@@ -301,7 +301,7 @@ model Settings {
   upiId               String?
   referralPercent     Float   @default(0)
   minRedeem           Decimal @default(0) @db.Decimal(10, 2)
-  numberExpiryMinutes Int     @default(15)
+  numberExpiryMinutes Int     @default(20)
   currency            String  @default("INR")
   minCancelMinutes    Int     @default(2)
   maintenanceMode     Boolean @default(false)
