@@ -18,7 +18,7 @@ const prisma = new PrismaClient({ adapter });
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL ?? '5000', 10);
 
 /* ──────────────────────────────────────────────────────────────── */
-/* Types */
+/* Types                                                            */
 /* ──────────────────────────────────────────────────────────────── */
 
 type SmsEntry = {
@@ -36,9 +36,18 @@ type RefundPayload = {
 };
 
 /* ──────────────────────────────────────────────────────────────── */
-/* Helpers */
+/* Helpers                                                          */
 /* ──────────────────────────────────────────────────────────────── */
 
+/**
+ * Append a new SMS to the smsContent array on an ActiveNumber.
+ * Handles backward-compat with old string format.
+ * Returns true if a new SMS was added, false if it was a duplicate.
+ *
+ * IMPORTANT: Always call this OUTSIDE of prisma.$transaction blocks.
+ * Calling it inside a transaction causes isolation conflicts where the
+ * write silently rolls back, leaving smsContent as null in the DB.
+ */
 async function appendSmsContent(
   numberId: string,
   newSms: string
@@ -56,6 +65,7 @@ async function appendSmsContent(
     if (Array.isArray(current.smsContent)) {
       existing = current.smsContent as SmsEntry[];
     } else if (typeof current.smsContent === 'string') {
+      // Backward compat: convert old string format to array
       existing = [
         {
           content: current.smsContent,
@@ -65,6 +75,7 @@ async function appendSmsContent(
     }
   }
 
+  // Deduplicate — don't add same SMS twice
   if (existing.some((s) => s.content === newSms)) return false;
 
   await prisma.activeNumber.update({
@@ -83,6 +94,11 @@ async function appendSmsContent(
   return true;
 }
 
+/**
+ * Auto-refund when number expires without SMS or provider cancels.
+ * Uses updateMany with balanceDeducted=true check to prevent double
+ * refunds atomically — if count === 0 it means already refunded, skip.
+ */
 async function handleAutoRefund(
   activeNumber: RefundPayload,
   userId: string,
@@ -96,6 +112,8 @@ async function handleAutoRefund(
       where: { id: activeNumber.serviceId },
     });
 
+    // Atomic guard — only proceeds if balanceDeducted is still true
+    // Prevents double refunds if called from multiple places concurrently
     const updated = await tx.activeNumber.updateMany({
       where: { id: activeNumber.id, balanceDeducted: true },
       data: {
@@ -105,6 +123,7 @@ async function handleAutoRefund(
       },
     });
 
+    // Already refunded by another process — skip
     if (updated.count === 0) return;
 
     await tx.wallet.update({
@@ -138,7 +157,7 @@ async function handleAutoRefund(
 }
 
 /* ──────────────────────────────────────────────────────────────── */
-/* Core Poll Logic */
+/* Core Poll Logic                                                  */
 /* ──────────────────────────────────────────────────────────────── */
 
 async function pollActiveNumbers(): Promise<void> {
@@ -158,6 +177,7 @@ async function pollActiveNumbers(): Promise<void> {
 
   for (const number of numbers) {
     try {
+      // Skip numbers still waiting for provider details after purchase
       if (
         number.numberId === 'PENDING' ||
         number.phoneNumber === 'PENDING'
@@ -169,20 +189,29 @@ async function pollActiveNumbers(): Promise<void> {
 
       if (number.expiresAt && number.expiresAt.getTime() < now) {
         const hasSms = !!number.smsContent;
-        const finalStatus = hasSms
-          ? NumberStatus.COMPLETED
-          : NumberStatus.CANCELLED;
 
-        const updated = await prisma.activeNumber.updateMany({
-          where: { id: number.id, balanceDeducted: true },
-          data: {
-            activeStatus: ActiveStatus.CLOSED,
-            status: finalStatus,
-            balanceDeducted: false,
-          },
-        });
-
-        if (updated.count > 0 && !hasSms) {
+        if (hasSms) {
+          // SMS already received — just close the number, no refund needed
+          // Use updateMany so concurrent calls are idempotent
+          await prisma.activeNumber.updateMany({
+            where: {
+              id: number.id,
+              activeStatus: ActiveStatus.ACTIVE,
+            },
+            data: {
+              activeStatus: ActiveStatus.CLOSED,
+              status: NumberStatus.COMPLETED,
+            },
+          });
+          console.log(
+            `[expired] orderId=${number.orderId} closed with SMS`
+          );
+        } else {
+          // FIX: No SMS — let handleAutoRefund close + refund atomically.
+          // Previously this block set balanceDeducted=false BEFORE calling
+          // handleAutoRefund, which caused the guard inside handleAutoRefund
+          // to find 0 matching rows and skip the refund entirely.
+          // Now handleAutoRefund owns the full atomic close+refund operation.
           await handleAutoRefund(
             {
               id: number.id,
@@ -193,19 +222,22 @@ async function pollActiveNumbers(): Promise<void> {
             number.userId,
             'expired'
           );
-
-          console.log(`[expired] orderId=${number.orderId} refunded`);
+          console.log(
+            `[expired] orderId=${number.orderId} refunded`
+          );
         }
 
         continue;
       }
+
+      /* ───── Build provider client ───── */
 
       const otpClient = new OtpProviderClient({
         apiUrl: number.service.server.api.apiUrl,
         apiKey: number.service.server.api.apiKey,
       });
 
-      /* ───── Additional SMS ───── */
+      /* ───── Additional SMS (multi-SMS support) ───── */
 
       if (
         number.smsContent &&
@@ -239,17 +271,14 @@ async function pollActiveNumbers(): Promise<void> {
         continue;
       }
 
-      /* ───── First SMS ───── */
+      /* ───── First SMS — poll provider ───── */
 
       let statusResponse;
       try {
         statusResponse = await otpClient.getStatus(number.numberId);
       } catch (err: unknown) {
         const message =
-          err instanceof Error
-            ? err.message
-            : JSON.stringify(err);
-
+          err instanceof Error ? err.message : JSON.stringify(err);
         console.error(
           `[net-err] orderId=${number.orderId}:`,
           message
@@ -257,10 +286,14 @@ async function pollActiveNumbers(): Promise<void> {
         continue;
       }
 
+      /* ── SMS received ── */
+
       if (
         statusResponse.status === 'RECEIVED' &&
         statusResponse.sms
       ) {
+        // appendSmsContent must be called OUTSIDE of any transaction
+        // (see function comment above)
         const added = await appendSmsContent(
           number.id,
           statusResponse.sms
@@ -271,7 +304,7 @@ async function pollActiveNumbers(): Promise<void> {
             where: { id: number.id },
             data: {
               status: NumberStatus.COMPLETED,
-              activeStatus: ActiveStatus.ACTIVE,
+              activeStatus: ActiveStatus.ACTIVE, // stays ACTIVE until expiry or user closes
             },
           });
 
@@ -285,7 +318,7 @@ async function pollActiveNumbers(): Promise<void> {
         continue;
       }
 
-      /* ───── Provider Cancelled ───── */
+      /* ── Provider cancelled ── */
 
       if (statusResponse.status === 'CANCELLED') {
         await handleAutoRefund(
@@ -305,12 +338,12 @@ async function pollActiveNumbers(): Promise<void> {
 
         continue;
       }
+
+      // STATUS_WAIT_CODE — nothing to do, will poll again next interval
+
     } catch (err: unknown) {
       const message =
-        err instanceof Error
-          ? err.message
-          : JSON.stringify(err);
-
+        err instanceof Error ? err.message : JSON.stringify(err);
       console.error(
         `[poll-err] orderId=${number.orderId}:`,
         message
@@ -320,7 +353,7 @@ async function pollActiveNumbers(): Promise<void> {
 }
 
 /* ──────────────────────────────────────────────────────────────── */
-/* PM2 Loop */
+/* PM2 Loop                                                         */
 /* ──────────────────────────────────────────────────────────────── */
 
 async function run(): Promise<void> {
@@ -345,10 +378,7 @@ async function run(): Promise<void> {
       await pollActiveNumbers();
     } catch (err: unknown) {
       const message =
-        err instanceof Error
-          ? err.message
-          : JSON.stringify(err);
-
+        err instanceof Error ? err.message : JSON.stringify(err);
       console.error('[otp-poller] unhandled error:', message);
     }
 

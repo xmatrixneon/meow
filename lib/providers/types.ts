@@ -53,6 +53,17 @@ export interface GetPricesResponse {
 }
 
 /**
+ * Response from getNumbersStatus API call
+ * Returns stock count for each service on a server/country
+ * Format: {"whatsapp_0": 50, "airtel_0": 25, "telegram_0": 100}
+ */
+export interface GetNumbersStatusResponse {
+  success: boolean;
+  data?: Record<string, number>;
+  error?: string;
+}
+
+/**
  * Status codes for setStatus action
  * - 8: Cancel the order
  * - 6: Mark order as finished (SMS received successfully)

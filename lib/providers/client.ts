@@ -14,6 +14,7 @@
     GetNumberResponse,
     GetStatusResponse,
     GetPricesResponse,
+    GetNumbersStatusResponse,
     SetStatusResponse,
     OtpProviderConfig,
     OtpProviderErrorCode,
@@ -355,6 +356,71 @@
     }
 
     /**
+     * Get stock status (available numbers count) for all services on a server/country
+     *
+     * @param country - Country code (e.g., 'in', 'us', '22')
+     * @returns GetNumbersStatusResponse with stock count for each service
+     *
+     * Response format example:
+     * {
+     *   "whatsapp_0": 50,
+     *   "airtel_0": 25,
+     *   "telegram_0": 100
+     * }
+     */
+    async getNumbersStatus(country: string): Promise<GetNumbersStatusResponse> {
+      try {
+        const response = await this.makeRequest('getNumbersStatus', { country });
+
+        // Check for error codes
+        if (this.isErrorCode(response)) {
+          return {
+            success: false,
+            error: this.parseError(response),
+          };
+        }
+
+        // Try to parse as JSON
+        try {
+          const data = JSON.parse(response);
+
+          // Validate that data is an object with numeric values
+          if (typeof data !== 'object' || data === null) {
+            return {
+              success: false,
+              error: `Invalid response format: expected object, got ${typeof data}`,
+            };
+          }
+
+          // Ensure all values are numbers
+          const validatedData: Record<string, number> = {};
+          for (const [key, value] of Object.entries(data)) {
+            const numValue = typeof value === 'string' ? parseFloat(value) : value as number;
+            if (typeof numValue === 'number' && !isNaN(numValue)) {
+              validatedData[key] = numValue;
+            }
+          }
+
+          return {
+            success: true,
+            data: validatedData,
+          };
+        } catch {
+          // Response is not valid JSON
+          return {
+            success: false,
+            error: `Invalid JSON response: ${response}`,
+          };
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
+        };
+      }
+    }
+
+    /**
      * Get the current account balance
      *
      * @returns Balance amount or error
@@ -399,6 +465,7 @@
     GetNumberResponse,
     GetStatusResponse,
     GetPricesResponse,
+    GetNumbersStatusResponse,
     SetStatusResponse,
     OtpProviderConfig,
     SmsStatus,

@@ -6,7 +6,6 @@ const nextConfig: NextConfig = {
     "localhost",
     "*.ngrok-free.dev",
   ],
-
   images: {
     remotePatterns: [
       {
@@ -26,6 +25,14 @@ const nextConfig: NextConfig = {
         hostname: "**.telegram.org",
       },
     ],
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/stubs/handler_api.php",
+        destination: "/api/stubs/handler_api.php",
+      },
+    ];
   },
 };
 
