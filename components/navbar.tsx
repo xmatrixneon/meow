@@ -86,8 +86,10 @@ export function Navbar({
           onClick={() => router.push("/wallet")}
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer",
-            "bg-primary/10 dark:bg-primary/15 text-primary",
-            "transition-colors duration-200 h-9"
+            "transition-colors duration-200 h-9",
+            walletBalance < 10
+              ? "bg-red-500/10 dark:bg-red-500/15 text-red-600 dark:text-red-400"
+              : "bg-green-500/10 dark:bg-green-500/15 text-green-600 dark:text-green-400"
           )}
         >
           {balanceLoading ? (
