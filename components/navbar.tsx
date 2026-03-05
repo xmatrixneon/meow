@@ -1,45 +1,33 @@
 "use client";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Image from "next/image";
-import {
-  Bell,
-  ChevronDown,
-  Wallet,
-  Cat,
-  Settings,
-  LogOut,
-  User as UserIcon,
-  Loader2,
-} from "lucide-react";
+import { Wallet, Loader2, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
+import { useSoundEnabled } from "@/hooks/use-sound-enabled";
 
 type NavbarProps = {
   className?: string;
-  notificationCount?: number;
 };
 
-export function Navbar({ className, notificationCount = 3 }: NavbarProps) {
-  // Get current user from session
+export function Navbar({ className }: NavbarProps) {
   const { data: session } = authClient.useSession();
   const user = session?.user as User | undefined;
-  const [showDropdown, setShowDropdown] = useState(false);
   const router = useRouter();
+  const { enabled, toggle } = useSoundEnabled();
 
-  // Fetch real wallet balance from tRPC with auto-refresh every 10 seconds
   const { data: balanceData, isLoading: balanceLoading } =
     trpc.wallet.balance.useQuery(undefined, {
-      refetchInterval: 10000, // Refresh every 10 seconds
-      enabled: !!user, // Only fetch if user is authenticated
+      refetchInterval: 10000,
+      enabled: !!user,
     });
 
   const walletBalance = balanceData?.balance ?? 0;
 
-  // Display name fallback chain - handles users with no username/name
   const displayName =
     user?.firstName ||
     user?.name ||
@@ -75,16 +63,15 @@ export function Navbar({ className, notificationCount = 3 }: NavbarProps) {
       >
         {/* Brand */}
         <div className="flex items-center gap-1.5 flex-1">
-          <div className="rounded-full overflow-hidden w-8 h-8 shrink-0">
+          <div className="rounded-full overflow-hidden w-10 h-10 shrink-0">
             <Image
               src="/meow.png"
               alt="MeowSMS logo"
-              width={35}
-              height={35}
+              width={40}
+              height={40}
               className="object-contain"
             />
           </div>
-
         </div>
 
         {/* Wallet Balance */}
@@ -100,69 +87,57 @@ export function Navbar({ className, notificationCount = 3 }: NavbarProps) {
           )}
         >
           {balanceLoading ? (
-            <Loader2
-              size={14}
-              strokeWidth={2}
-              className="animate-spin"
-              aria-hidden
-            />
+            <Loader2 size={14} strokeWidth={2} className="animate-spin" />
           ) : (
-            <Wallet size={15} strokeWidth={2} aria-hidden />
+            <Wallet size={15} strokeWidth={2} />
           )}
           <span className="font-semibold text-xs whitespace-nowrap">
             ₹{walletBalance.toFixed(2)}
           </span>
         </motion.div>
 
-        {/* Notification Bell */}
+        {/* Sound toggle */}
         <motion.button
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.92 }}
           type="button"
-          aria-label={`Notifications${notificationCount > 0 ? `, ${notificationCount} unread` : ""}`}
+          onClick={toggle}
+          aria-label={
+            enabled ? "Mute SMS notifications" : "Unmute SMS notifications"
+          }
           className={cn(
-            "relative flex items-center justify-center",
-            "w-9 h-9 rounded-full",
-            "text-muted-foreground hover:bg-muted dark:hover:bg-muted",
-            "transition-colors duration-200 focus:outline-none",
+            "relative flex items-center justify-center w-9 h-9 rounded-full transition-colors duration-200",
+            enabled
+              ? "bg-primary/10 text-primary"
+              : "bg-muted text-muted-foreground hover:bg-muted/80",
           )}
         >
-          <Bell size={18} strokeWidth={2} aria-hidden />
-          <AnimatePresence>
-            {notificationCount > 0 && (
-              <motion.span
-                key="badge"
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                className={cn(
-                  "absolute -top-0.5 -right-0.5",
-                  "bg-primary text-primary-foreground",
-                  "text-[9px] font-bold leading-none",
-                  "min-w-[16px] h-4 px-1 rounded-full",
-                  "flex items-center justify-center",
-                )}
-              >
-                {notificationCount > 9 ? "9+" : notificationCount}
-              </motion.span>
+          <motion.div
+            key={enabled ? "on" : "off"}
+            initial={{ scale: 0.7, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+          >
+            {enabled ? (
+              <Volume2 size={17} strokeWidth={2} />
+            ) : (
+              <VolumeX size={17} strokeWidth={2} />
             )}
-          </AnimatePresence>
+          </motion.div>
         </motion.button>
 
-        {/* Avatar / Profile */}
+        {/* Avatar */}
         {user ? (
           <motion.button
             whileTap={{ scale: 0.95 }}
             type="button"
             aria-label="Profile menu"
-            onClick={() => setShowDropdown((p) => !p)}
+            onClick={() => router.push("/profile")}
             className={cn(
               "flex items-center gap-1 pl-1 pr-2 py-1 rounded-full",
               "hover:bg-muted dark:hover:bg-muted",
               "transition-colors duration-200 focus:outline-none h-9",
             )}
           >
-            {/* Avatar circle */}
             <div
               className={cn(
                 "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
@@ -181,7 +156,6 @@ export function Navbar({ className, notificationCount = 3 }: NavbarProps) {
             </div>
           </motion.button>
         ) : (
-          // Placeholder when no user
           <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
         )}
       </nav>
