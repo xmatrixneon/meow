@@ -79,14 +79,12 @@ export function Navbar({ className, notificationCount = 3 }: NavbarProps) {
             <Image
               src="/meow.png"
               alt="MeowSMS logo"
-              width={32}
-              height={32}
+              width={35}
+              height={35}
               className="object-contain"
             />
           </div>
-          <span className="font-semibold text-sm tracking-tight text-foreground whitespace-nowrap">
-            MeowSMS
-          </span>
+
         </div>
 
         {/* Wallet Balance */}
