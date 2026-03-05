@@ -33,7 +33,6 @@ export function PromoDialog({ open, onOpenChange, onSuccess }: PromoDialogProps)
       }
     },
     onError: (error) => {
-      // Provide better error messages
       let errorMessage = error.message || "Failed to redeem promo code";
       if (errorMessage.includes("invalid") || errorMessage.includes("NOT_FOUND")) {
         errorMessage = "Invalid promo code. Please check and try again.";
@@ -56,30 +55,29 @@ export function PromoDialog({ open, onOpenChange, onSuccess }: PromoDialogProps)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Gift size={18} className="text-violet-500" />
+      <DialogContent className="rounded-3xl max-w-sm w-[95vw]">
+        <DialogHeader className="space-y-2">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <Gift size={18} className="text-violet-500 flex-shrink-0" />
             Redeem Promo Code
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm">
             Enter your 12-character promo code to get bonus balance
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-4">
+        <div className="space-y-4 pt-2">
           <Input
-            placeholder="Enter promo code"
+            placeholder="ENTER PROMO CODE"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             maxLength={12}
-            className="rounded-xl text-center font-mono text-lg tracking-widest"
+            className="rounded-xl h-11 sm:h-12 text-center font-mono text-base sm:text-lg tracking-widest"
           />
-
           <Button
             onClick={handleSubmit}
             disabled={redeemMutation.isPending || !code.trim()}
-            className="w-full rounded-xl"
+            className="w-full rounded-xl h-11 sm:h-12 text-sm sm:text-base font-medium"
           >
             {redeemMutation.isPending ? (
               <>

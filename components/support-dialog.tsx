@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SupportDialogProps {
   open: boolean;
@@ -64,63 +63,50 @@ export function SupportDialog({ open, onOpenChange, telegramHelpUrl }: SupportDi
       <DialogContent className="rounded-3xl max-w-lg w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col">
         {/* Header */}
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base sm:text-lg">Help & FAQ</DialogTitle>
-            <DialogClose asChild>
-              <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
-                <X size={16} />
-              </button>
-            </DialogClose>
-          </div>
+          <DialogTitle className="text-base sm:text-lg">Help & FAQ</DialogTitle>
         </DialogHeader>
 
         {/* FAQ list */}
         <ScrollArea className="flex-1 overflow-y-auto">
           <div className="p-4 sm:p-5 space-y-2 sm:space-y-3">
-            <AnimatePresence initial={false}>
-              {faqs.map((faq, index) => {
-                const isOpen = openFaq === index;
-                return (
-                  <motion.div
-                    key={index}
-                    layout
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 280, damping: 24 }}
-                    className="bg-card border border-border rounded-2xl overflow-hidden"
+            {faqs.map((faq, index) => {
+              const isOpen = openFaq === index;
+              return (
+                <div
+                  key={index}
+                  className="bg-card border border-border rounded-2xl overflow-hidden"
+                >
+                  <button
+                    onClick={() => setOpenFaq(isOpen ? null : index)}
+                    className="w-full px-3 sm:px-4 py-3 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
                   >
-                    <button
-                      onClick={() => setOpenFaq(isOpen ? null : index)}
-                      className="w-full px-3 sm:px-4 py-3 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
-                    >
-                      <span className="text-xs sm:text-sm font-medium text-foreground pr-3">
-                        {faq.question}
-                      </span>
-                      {isOpen ? (
-                        <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-xs sm:text-sm font-medium text-foreground pr-3">
+                      {faq.question}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200",
+                        isOpen && "rotate-180"
                       )}
-                    </button>
+                    />
+                  </button>
 
-                    <AnimatePresence>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="px-3 sm:px-4 pb-3 text-xs text-muted-foreground leading-relaxed border-t border-border/60 pt-2"
-                        >
-                          {faq.answer}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
+                  {/* CSS grid-rows trick: smooth open/close with zero flicker */}
+                  <div
+                    className={cn(
+                      "grid transition-all duration-200 ease-in-out",
+                      isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    )}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="px-3 sm:px-4 pb-3 pt-2 text-xs text-muted-foreground leading-relaxed border-t border-border/60">
+                        {faq.answer}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </ScrollArea>
 

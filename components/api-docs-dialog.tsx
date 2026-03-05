@@ -6,10 +6,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Copy, Check, Code, AlertTriangle, X } from "lucide-react";
+import { Copy, Check, Code, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -52,14 +51,7 @@ export function ApiDocsDialog({ open, onOpenChange, apiKey }: ApiDocsDialogProps
       {/* Match DepositDialog: rounded-3xl, w-[95vw], max-h-[90vh] overflow-y-auto */}
       <DialogContent className="rounded-3xl max-w-lg w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base sm:text-lg">API Documentation</DialogTitle>
-            <DialogClose asChild>
-              <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
-                <X size={16} />
-              </button>
-            </DialogClose>
-          </div>
+          <DialogTitle className="text-base sm:text-lg">API Documentation</DialogTitle>
         </DialogHeader>
 
         {/* ScrollArea with responsive height */}

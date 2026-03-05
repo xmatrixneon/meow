@@ -6,10 +6,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LegalDialogProps {
@@ -81,14 +79,7 @@ export function LegalDialog({ open, onOpenChange }: LegalDialogProps) {
       <DialogContent className="rounded-3xl max-w-lg w-[95vw] max-h-[90vh] p-0 overflow-hidden flex flex-col">
         {/* Header */}
         <DialogHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center justify-between mb-3">
-            <DialogTitle className="text-base sm:text-lg">Terms & Privacy</DialogTitle>
-            <DialogClose asChild>
-              <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
-                <X size={16} />
-              </button>
-            </DialogClose>
-          </div>
+          <DialogTitle className="text-base sm:text-lg mb-3">Terms & Privacy</DialogTitle>
           {/* Tabs */}
           <div className="flex gap-1">
             <button
