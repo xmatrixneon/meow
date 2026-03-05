@@ -33,7 +33,8 @@
       "mcp__postgres__list_objects",
       "mcp__postgres__list_schemas",
       "mcp__postgres__get_object_details",
-      "mcp__postgres__execute_sql"
+      "mcp__postgres__execute_sql",
+      "Bash(npx tsc --noEmit --skipLibCheck 2>&1 | head -50)"
     ]
   }
 }

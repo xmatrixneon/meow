@@ -506,7 +506,7 @@ export default function TransactionsPage() {
                         {subtitle}
                       </p>
 
-                      {/* PURCHASE: Show service, SMS status */}
+                      {/* PURCHASE: Show SMS status */}
                       {tx.type === "PURCHASE" && (
                         <>
                           {(tx.metadata as any)?.smsReceived && (
@@ -520,18 +520,10 @@ export default function TransactionsPage() {
                               </span>
                             </div>
                           )}
-                          {tx.phoneNumber && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <CreditCard size={9} className="text-primary" />
-                              <span className="text-[10px] text-primary">
-                                {tx.phoneNumber}
-                              </span>
-                            </div>
-                          )}
                         </>
                       )}
 
-                      {/* REFUND: Show service name and phone number */}
+                      {/* REFUND: Show service name */}
                       {tx.type === "REFUND" && (
                         <>
                           {(tx.metadata as any)?.serviceName && (
@@ -539,17 +531,6 @@ export default function TransactionsPage() {
                               <Zap size={9} className="text-sky-500" />
                               <span className="text-[10px] text-sky-500">
                                 {(tx.metadata as any)?.serviceName}
-                              </span>
-                            </div>
-                          )}
-                          {tx.phoneNumber && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <CreditCard
-                                size={9}
-                                className="text-sky-600/70"
-                              />
-                              <span className="text-[10px] text-sky-600/70">
-                                {tx.phoneNumber}
                               </span>
                             </div>
                           )}

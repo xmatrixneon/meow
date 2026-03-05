@@ -23,6 +23,7 @@ import {
   IndianRupee,
   Phone,
   PersonStanding,
+  Globe,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -330,6 +331,9 @@ export default function MiniAppPage() {
   });
   const { data: walletData } = trpc.wallet.balance.useQuery();
   const { data: settingsData } = trpc.service.settings.useQuery();
+  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(undefined, {
+    staleTime: 60 * 1000,
+  });
 
   const utils = trpc.useUtils();
 
@@ -608,15 +612,84 @@ export default function MiniAppPage() {
               View all <ChevronRight size={12} />
             </button>
           </div>
-          <div className="flex flex-col items-center py-5 gap-2">
-            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-              <Hash size={18} className="text-muted-foreground" />
+          <ScrollArea className="h-[240px] w-full -mx-4 px-4">
+            <div className="flex flex-col items-center py-5 gap-2">
+              {recentNumbersData?.numbers && recentNumbersData.numbers.length > 0 ? (
+                <div className="w-full space-y-2">
+                  {recentNumbersData.numbers.slice(0, 3).map((num) => {
+                  const server = num.service?.server;
+                  const isCompleted = num.status === "COMPLETED";
+                  const isCancelled = num.status === "CANCELLED";
+                  const statusColor = isCompleted ? "text-green-500" : isCancelled ? "text-destructive" : "text-amber-500";
+                  const statusLabel = isCompleted ? "Received" : isCancelled ? "Cancelled" : "Waiting";
+
+                  return (
+                    <div
+                      key={num.id}
+                      className="flex items-center gap-3 px-3 py-2.5 bg-muted/30 rounded-xl border border-border hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => router.push("/numbers")}
+                    >
+                      {/* Country flag */}
+                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                        {server?.flagUrl ? (
+                          <Image
+                            src={server.flagUrl}
+                            alt={server.countryName || ""}
+                            width={36}
+                            height={36}
+                            className="w-full h-full object-cover"
+                            unoptimized
+                          />
+                        ) : server?.countryIso ? (
+                          <span className="text-sm">{getCountryFlagEmoji(server.countryIso)}</span>
+                        ) : (
+                          <Globe size={14} className="text-muted-foreground" />
+                        )}
+                      </div>
+
+                      {/* Number and service info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm font-mono tracking-tight truncate">
+                          {num.phoneNumber}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {num.service?.name || "Unknown"}
+                          </p>
+                          <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full border",
+                            isCompleted ? "bg-green-500/10 border-green-500/30 text-green-500" :
+                            isCancelled ? "bg-red-500/10 border-red-500/30 text-red-500" :
+                            "bg-amber-400/10 border-amber-400/30 text-amber-500"
+                          )}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Time ago */}
+                      <p className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(num.createdAt).getTime() > Date.now() - 3600000
+                          ? `${Math.floor((Date.now() - new Date(num.createdAt).getTime()) / 60000)}m ago`
+                          : `${Math.floor((Date.now() - new Date(num.createdAt).getTime()) / 3600000)}h ago`
+                        }
+                      </p>
+                    </div>
+                  );
+                })}
+                </div>
+              ) : (
+              <>
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                  <Hash size={18} className="text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No numbers yet</p>
+                <p className="text-xs text-muted-foreground/60">
+                  Pick a service above to get started
+                </p>
+              </>
+            )}
             </div>
-            <p className="text-sm text-muted-foreground">No numbers yet</p>
-            <p className="text-xs text-muted-foreground/60">
-              Pick a service above to get started
-            </p>
-          </div>
+          </ScrollArea>
         </motion.div>
       </div>
 
