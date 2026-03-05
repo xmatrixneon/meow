@@ -188,6 +188,7 @@ async function handleAutoRefund(
           reason === "expired"
             ? "Auto-refund: Number expired without SMS"
             : "Auto-refund: Provider cancelled order",
+        phoneNumber: activeNumber.phoneNumber,
         metadata: {
           orderId: activeNumber.orderId,
           reason,
@@ -319,6 +320,7 @@ export const numberRouter = createTRPCRouter({
         where: { metadata: { path: ["orderId"], equals: orderId } },
         data: {
           description: `Purchased ${service.name} number: ${numberResponse.phoneNumber}`,
+          phoneNumber: numberResponse.phoneNumber,
           metadata: {
             orderId,
             numberId: numberResponse.orderId,
@@ -663,6 +665,7 @@ export const numberRouter = createTRPCRouter({
           amount: activeNumber.price,
           status: "COMPLETED",
           description: `Cancelled: ${activeNumber.service.name} - ${activeNumber.phoneNumber}`,
+          phoneNumber: activeNumber.phoneNumber,
           metadata: {
             orderId: activeNumber.orderId,
             numberId: activeNumber.numberId,

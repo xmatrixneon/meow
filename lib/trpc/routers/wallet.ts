@@ -106,7 +106,7 @@ export const walletRouter = createTRPCRouter({
             where: {
               userId,
               status: "COMPLETED",
-              smsContent: { not: null },
+              smsContent: { not: Prisma.DbNull },
             },
           }),
           // Total spent on completed numbers
@@ -137,6 +137,7 @@ export const walletRouter = createTRPCRouter({
         status: tx.status,
         description: tx.description,
         txnId: tx.txnId,
+        phoneNumber: tx.phoneNumber,
         metadata: tx.metadata,
         createdAt: tx.createdAt.toISOString(),
       }));

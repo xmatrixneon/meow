@@ -12,6 +12,14 @@ import {
   Zap,
   CreditCard,
   IndianRupee,
+  Gift,
+  Sparkles,
+  Settings,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -39,15 +47,20 @@ const statusConfig = {
   failed:    { color: "text-rose-500",  bg: "bg-rose-500/10",  label: "Failed"    },
 } as const;
 
-const getTransactionIcon = (type: string) => {
+const getTransactionIcon = (type: string, status: string) => {
+  // Show status-based icons
+  if (status === "FAILED") return <XCircle size={16} />;
+  if (status === "PENDING") return <AlertCircle size={16} />;
+
+  // Show action-based icons for completed transactions
   switch (type) {
-    case "PURCHASE":   return <CreditCard size={16} />;
-    case "DEPOSIT":    return <Wallet     size={16} />;
-    case "REFUND":     return <Zap        size={16} />;
-    case "PROMO":      return <Gift       size={16} />;
-    case "REFERRAL":   return <Sparkles   size={16} />;
-    case "ADJUSTMENT": return <Settings   size={16} />;
-    default:           return <Clock      size={16} />;
+    case "PURCHASE":   return <ShoppingBag size={16} />;   // Purchased
+    case "DEPOSIT":    return <Wallet      size={16} />;   // Deposited
+    case "REFUND":     return <XCircle      size={16} />;   // Cancelled/Refunded
+    case "PROMO":      return <Gift         size={16} />;   // Promo
+    case "REFERRAL":   return <Sparkles     size={16} />;   // Bonus
+    case "ADJUSTMENT": return <Settings     size={16} />;   // Adjustment
+    default:           return <Clock        size={16} />;
   }
 };
 
@@ -65,39 +78,57 @@ const getTransactionColor = (type: string) => {
 
 const getTransactionTitle = (tx: { type: string; description: string | null; metadata: any }) => {
   const { type, description, metadata } = tx;
+
+  // For PURCHASE and REFUND, extract just the service name from description or metadata
+  if (type === "PURCHASE") {
+    // First try to get serviceName from metadata
+    if (metadata?.serviceName) return metadata.serviceName;
+    // Otherwise extract from description (e.g., "BigBasket number purchased" → "BigBasket")
+    if (description) {
+      const serviceMatch = description.match(/^([A-Za-z]+)(?:\s+number)?/);
+      return serviceMatch ? serviceMatch[1] : description;
+    }
+    return "Purchase";
+  }
+
+  if (type === "REFUND") {
+    // First try to get serviceName from metadata
+    if (metadata?.serviceName) return metadata.serviceName;
+    // Otherwise extract from description
+    if (description) {
+      const serviceMatch = description.match(/^([A-Za-z]+)/);
+      return serviceMatch ? serviceMatch[1] : description;
+    }
+    return "Refund";
+  }
+
+  // For other types, use description if available
   if (description) return description;
+
   switch (type) {
-    case "PURCHASE":   return metadata?.serviceName ? `Temp Number - ${metadata.serviceName}` : "Temp Number";
-    case "DEPOSIT":    return "Wallet Deposit";
-    case "REFUND":     return "Number Cancelled - Refunded";
-    case "PROMO":      return "Promo Code Redeemed";
-    case "REFERRAL":   return "Referral Bonus";
-    case "ADJUSTMENT": return "Balance Adjustment";
+    case "DEPOSIT":    return "Deposit";
+    case "PROMO":      return "Promo";
+    case "REFERRAL":   return "Bonus";
+    case "ADJUSTMENT": return "Adjustment";
     default:           return "Transaction";
   }
 };
 
-const getTransactionSubtitle = (tx: { type: string; metadata: any; createdAt: string; status: string }) => {
-  const { type, metadata, createdAt, status } = tx;
-  if (status === "PENDING") return "Pending confirmation";
-  if (status === "FAILED")  return "Transaction failed";
+const getTransactionSubtitle = (tx: { type: string; metadata: any; createdAt: string; status: string; phoneNumber: string | null }) => {
+  const { type, metadata, createdAt, status, phoneNumber } = tx;
+  if (status === "PENDING") return "Pending";
+  if (status === "FAILED")  return "Failed";
   switch (type) {
     case "PURCHASE":
-      return metadata?.phoneNumber
-        ? `${metadata.countryName || "Unknown"} · ${metadata.phoneNumber}`
-        : "Temp Number";
+      return phoneNumber || "Number";
     case "DEPOSIT":
-      if (metadata?.payerVpa) return `UPI · ${metadata.payerVpa}`;
-      if (metadata?.utr)      return `UTR · ${metadata.utr.substring(0, 12)}...`;
-      return "Wallet Deposit";
+      return metadata?.payerVpa || metadata?.utr?.substring(0, 8) || "Wallet";
     case "REFUND":
-      if (metadata?.phoneNumber)  return `Cancelled · ${metadata.phoneNumber}`;
-      if (metadata?.serviceName)  return `Refunded · ${metadata.serviceName}`;
-      return "Number Cancelled - Refunded";
+      return phoneNumber || metadata?.serviceName || "Refunded";
     case "PROMO":
-      return metadata?.promocodeCode ? `Code: ${metadata.promocodeCode}` : "Promo Code Redeemed";
-    case "REFERRAL":   return "Referral Bonus";
-    case "ADJUSTMENT": return "Balance Adjustment";
+      return metadata?.promocodeCode || "Code";
+    case "REFERRAL":   return "Referral";
+    case "ADJUSTMENT": return "Balance";
     default:           return formatDistanceToNow(new Date(createdAt), { addSuffix: true });
   }
 };
@@ -371,36 +402,28 @@ export default function TransactionsPage() {
                     transition={{ type: "spring" as const, stiffness: 280, damping: 24, delay: i * 0.04 }}
                     className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-muted/40 transition-colors duration-150"
                   >
-                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 relative", colorConfig.bg)}>
-                      <div className={colorConfig.color}>{getTransactionIcon(tx.type)}</div>
-                      <span className={cn(
-                        "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card",
-                        tx.status === "COMPLETED" ? "bg-green-500" : tx.status === "PENDING" ? "bg-amber-400" : "bg-rose-500"
-                      )} />
+                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", colorConfig.bg)}>
+                      <div className={colorConfig.color}>{getTransactionIcon(tx.type, tx.status)}</div>
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{title}</p>
                       <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
 
-                      {/* PURCHASE: Show service, SMS status, order ID */}
+                      {/* PURCHASE: Show service, SMS status */}
                       {tx.type === "PURCHASE" && (
                         <>
-                          {(tx.metadata as any)?.serviceName && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
-                              {(tx.metadata as any)?.serviceName}
-                            </span>
-                          )}
                           {(tx.metadata as any)?.smsReceived && (
                             <div className="flex items-center gap-1 mt-0.5">
                               <MessageSquare size={9} className="text-green-500" />
-                              <span className="text-[10px] text-green-500">SMS received</span>
+                              <span className="text-[10px] text-green-500">SMS</span>
                             </div>
                           )}
-                          {(tx.metadata as any)?.orderId && (
-                            <span className="text-[10px] text-muted-foreground/70 font-mono block mt-0.5">
-                              #{(tx.metadata as any)?.orderId?.substring(0, 8)}...
-                            </span>
+                          {tx.phoneNumber && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <CreditCard size={9} className="text-primary" />
+                              <span className="text-[10px] text-primary">{tx.phoneNumber}</span>
+                            </div>
                           )}
                         </>
                       )}
@@ -409,19 +432,16 @@ export default function TransactionsPage() {
                       {tx.type === "REFUND" && (
                         <>
                           {(tx.metadata as any)?.serviceName && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-500 inline-block mt-1">
-                              {(tx.metadata as any)?.serviceName}
-                            </span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <Zap size={9} className="text-sky-500" />
+                              <span className="text-[10px] text-sky-500">{(tx.metadata as any)?.serviceName}</span>
+                            </div>
                           )}
-                          {(tx.metadata as any)?.phoneNumber && (
-                            <span className="text-[10px] text-sky-600/70 block mt-0.5">
-                              {(tx.metadata as any)?.phoneNumber}
-                            </span>
-                          )}
-                          {(tx.metadata as any)?.orderId && (
-                            <span className="text-[10px] text-muted-foreground/70 font-mono">
-                              #{(tx.metadata as any)?.orderId?.substring(0, 8)}...
-                            </span>
+                          {tx.phoneNumber && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <CreditCard size={9} className="text-sky-600/70" />
+                              <span className="text-[10px] text-sky-600/70">{tx.phoneNumber}</span>
+                            </div>
                           )}
                         </>
                       )}

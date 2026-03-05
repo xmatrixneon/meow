@@ -170,6 +170,7 @@ model Transaction {
   status      TransactionStatus @default(COMPLETED)
   description String?
   txnId       String?  // UTR or reference
+  phoneNumber String?  // For PURCHASE and REFUND transactions
   metadata    Json?
   createdAt   DateTime @default(now())
   wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
