@@ -20,6 +20,9 @@ import {
   TrendingDown,
   TrendingUp,
   BadgeCheck,
+  RefreshCw,
+  Key,
+  Clock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -194,6 +197,7 @@ function ProfileSkeleton() {
 export default function ProfilePage() {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   // ✅ single source of truth
   const { data: session, isPending } = authClient.useSession();
@@ -202,6 +206,24 @@ export default function ProfilePage() {
   // Get wallet data with real statistics
   const { data: walletData } = trpc.wallet.balance.useQuery(undefined, {
     enabled: !!user,
+  });
+
+  // Get or create API key
+  const { data: apiKeyData, refetch: refetchApiKey } =
+    trpc.apiKey.get.useQuery(undefined, {
+      enabled: !!user,
+    });
+
+  // Refresh API key mutation
+  const refreshApiKeyMutation = trpc.apiKey.refresh.useMutation({
+    onSuccess: () => {
+      refetchApiKey();
+      setCopied(false);
+      setRefreshError(null);
+    },
+    onError: (error) => {
+      setRefreshError(error.message);
+    },
   });
 
   const displayName =
@@ -224,6 +246,20 @@ export default function ProfilePage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleCopyApiKey = () => {
+    if (apiKeyData?.apiKey) {
+      navigator.clipboard.writeText(apiKeyData.apiKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleRefreshApiKey = () => {
+    if (refreshApiKeyMutation.isPending) return;
+    setRefreshError(null);
+    refreshApiKeyMutation.mutate();
   };
 
   const balance = Number(walletData?.balance ?? 0);
@@ -363,6 +399,93 @@ export default function ProfilePage() {
                 {totalRecharge.toFixed(2)}
               </p>
             </div>
+          </div>
+        </motion.div>
+
+        {/* API Key Section */}
+        <motion.div
+          {...fadeUp(0.1)}
+          className="bg-card border border-border rounded-2xl overflow-hidden"
+        >
+          <div className="px-5 py-4 border-b border-border/60">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60">
+              API Access
+            </p>
+          </div>
+          <div className="p-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Use this API key to resell our SMS services programmatically.
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-muted/50 border border-border rounded-xl px-3 py-2.5 overflow-hidden">
+                <code className="text-xs font-mono text-foreground truncate block">
+                  {apiKeyData?.apiKey ?? "Loading..."}
+                </code>
+              </div>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCopyApiKey}
+                disabled={!apiKeyData?.apiKey}
+                className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Copy API Key"
+              >
+                <Copy
+                  size={16}
+                  strokeWidth={2}
+                  className={
+                    copied ? "text-green-500" : "text-primary"
+                  }
+                />
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={handleRefreshApiKey}
+                disabled={refreshApiKeyMutation.isPending || !apiKeyData?.canRefresh}
+                className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed relative"
+                title={apiKeyData?.canRefresh ? "Regenerate API Key" : "Cooldown active"}
+              >
+                <RefreshCw
+                  size={16}
+                  strokeWidth={2}
+                  className={
+                    refreshApiKeyMutation.isPending
+                      ? "text-amber-500 animate-spin"
+                      : !apiKeyData?.canRefresh
+                      ? "text-amber-500/50"
+                      : "text-amber-500"
+                  }
+                />
+                {!apiKeyData?.canRefresh && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center">
+                    <Clock size={7} className="text-white" />
+                  </span>
+                )}
+              </motion.button>
+            </div>
+            <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+              <p className="flex items-center gap-1">
+                Created: {apiKeyData?.createdAt ? new Date(apiKeyData.createdAt).toLocaleDateString() : '-'}
+              </p>
+              <span className="w-px h-3 bg-border/60" />
+              <p className="flex items-center gap-1">
+                Refreshed: {apiKeyData?.refreshCount ?? 0}/{apiKeyData?.limits?.weeklyLimit ?? 10} (weekly)
+              </p>
+            </div>
+            {apiKeyData?.cooldownRemaining && apiKeyData.cooldownRemaining > 0 && (
+              <p className="text-[10px] text-amber-500 flex items-center gap-1">
+                <Clock size={9} />
+                Cooldown: {apiKeyData.cooldownRemaining} min remaining
+              </p>
+            )}
+            {refreshError && (
+              <motion.p
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-[11px] text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2"
+              >
+                {refreshError}
+              </motion.p>
+            )}
           </div>
         </motion.div>
 
