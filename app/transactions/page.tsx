@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -198,10 +198,19 @@ export default function TransactionsPage() {
   const hasMore         = txOffset + 50 < total;
 
   // Filter transactions based on selected type
+  // Get set of refunded orderIds to exclude cancelled purchases from "Numbers" filter
+  const refundedOrderIds = useMemo(() => {
+    const refunds = allTransactions.filter(tx => tx.type === "REFUND");
+    return new Set(refunds.map(tx => (tx.metadata as any)?.orderId));
+  }, [allTransactions]);
+
   const filteredTransactions = filter === "all"
     ? allTransactions
     : allTransactions.filter(tx => {
-        if (filter === "numbers") return tx.type === "PURCHASE";
+        if (filter === "numbers") {
+          // Only show PURCHASE transactions that haven't been refunded
+          return tx.type === "PURCHASE" && !refundedOrderIds.has((tx.metadata as any)?.orderId);
+        }
         if (filter === "refunds") return tx.type === "REFUND";
         if (filter === "deposits") return tx.type === "DEPOSIT";
         return true;
@@ -299,7 +308,7 @@ export default function TransactionsPage() {
                 <div>
                   <p className="text-[10px] text-muted-foreground">Numbers bought</p>
                   <p className="text-sm font-bold text-foreground tabular-nums">
-                    {allTransactions.filter(t => t.type === "PURCHASE").length}
+                    {data?.statistics?.numberCountWithSms ?? 0}
                   </p>
                 </div>
               </div>
@@ -345,7 +354,7 @@ export default function TransactionsPage() {
                   : f.value === "all"
                     ? total
                     : f.value === "numbers"
-                      ? allTransactions.filter(t => t.type === "PURCHASE").length
+                      ? allTransactions.filter(t => t.type === "PURCHASE" && !refundedOrderIds.has((t.metadata as any)?.orderId)).length
                       : f.value === "refunds"
                         ? allTransactions.filter(t => t.type === "REFUND").length
                         : allTransactions.filter(t => t.type === "DEPOSIT").length
