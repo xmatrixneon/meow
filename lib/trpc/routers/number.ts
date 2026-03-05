@@ -71,6 +71,14 @@ async function handleBuyFailure(
 
       await tx.activeNumber.delete({ where: { id: activeNumber.id } });
 
+      // Delete the original PURCHASE transaction for failed purchases
+      await tx.transaction.deleteMany({
+        where: {
+          metadata: { path: ["orderId"], equals: orderId },
+          type: "PURCHASE",
+        },
+      });
+
       await tx.wallet.update({
         where: { userId },
         data: {
@@ -79,20 +87,6 @@ async function handleBuyFailure(
           totalOtp: { decrement: 1 },
         },
       });
-
-      const wallet = await tx.wallet.findUnique({ where: { userId } });
-      if (wallet) {
-        await tx.transaction.create({
-          data: {
-            walletId: wallet.id,
-            type: "REFUND",
-            amount: price,
-            status: "COMPLETED",
-            description: "No number available from provider",
-            metadata: { orderId, reason: "provider_no_number" },
-          },
-        });
-      }
     });
   } catch (error) {
     console.error("[buy] Failed to refund after buy error:", error);
@@ -214,6 +208,10 @@ export const numberRouter = createTRPCRouter({
    * If provider fails at any point, automatically refunds and deletes the pending record.
    */
   buy: protectedProcedure.input(buySchema).mutation(async ({ ctx, input }) => {
+    console.log("[Number.buy] Starting buy mutation");
+    console.log("[Number.buy] User ID:", ctx.user?.id);
+    console.log("[Number.buy] Input:", input);
+
     const userId = ctx.user.id;
 
     const service = await prisma.service.findFirst({
@@ -285,6 +283,13 @@ export const numberRouter = createTRPCRouter({
 
     // Step 2: Call provider (outside transaction)
     try {
+      console.log("[Number.buy] Calling OTP provider API:", {
+        apiUrl: service.server.api.apiUrl,
+        apiKey: service.server.api.apiKey ? `${service.server.api.apiKey.substring(0, 8)}...` : 'NOT SET',
+        serviceCode: service.code,
+        countryCode: service.server.countryCode,
+      });
+
       const otpClient = new OtpProviderClient({
         apiUrl: service.server.api.apiUrl,
         apiKey: service.server.api.apiKey,

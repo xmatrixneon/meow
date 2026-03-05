@@ -19,11 +19,26 @@ export interface Context {
  */
 export async function createTRPCContext(): Promise<Context> {
   const headersList = await nextHeaders();
+
+  // Log headers for debugging (remove in production)
+  console.log("[TRPC Context] Creating context");
+  console.log("[TRPC Context] Headers:", {
+    cookie: headersList.get("cookie")?.substring(0, 50) + "...",
+    userAgent: headersList.get("user-agent")?.substring(0, 50) + "...",
+  });
+
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
+  console.log("[TRPC Context] Session result:", {
+    hasSession: !!session,
+    hasUser: !!session?.user,
+    userId: session?.user?.id,
+  });
+
   if (!session) {
+    console.log("[TRPC Context] No session found, returning null user");
     return {
       session: null,
       user: null,
@@ -31,6 +46,7 @@ export async function createTRPCContext(): Promise<Context> {
   }
 
   // The user from session includes our extended Telegram fields
+  console.log("[TRPC Context] Session found, returning user:", session.user.id);
   return {
     session,
     user: session.user as User,

@@ -1,0 +1,14 @@
+// Temporary script to update API credentials
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model UpdateApiCredential {
+  id String @id @default("1")
+  executed Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}

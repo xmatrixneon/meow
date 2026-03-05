@@ -1,7 +1,39 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx prisma init)"
+      "Bash(npx prisma init)",
+      "Bash(pm2 logs --lines 30 --nostream 2>/dev/null || journalctl -u pm2 --lines 30 --no-pager 2>/dev/null || echo \"No logs found\")",
+      "Bash(npm run build 2>&1)",
+      "Bash(pm2 restart all)",
+      "Bash(pm2 logs --lines 10 --nostream 2>/dev/null | grep -E \"\\(Ready|error|Error\\)\" | tail -5)",
+      "Bash(pm2 restart all && sleep 3 && pm2 logs --lines 50 --nostream 2>/dev/null)",
+      "Bash(pm2 logs meowsms-web-1 --lines 30 --nostream 2>/dev/null | tail -30)",
+      "Bash(npx ts-node scripts/check-api.ts 2>&1)",
+      "Bash(node scripts/check-api.js 2>&1)",
+      "Bash(npx prisma db execute --stdin 2>&1 << 'EOF'\nSELECT \"name\", \"apiUrl\", \"isActive\", \n  CASE WHEN \"apiKey\" IS NULL THEN 'NOT SET' ELSE SUBSTRING\\(\"apiKey\", 1, 8\\) || '...' END as apiKeyPrefix\nFROM \"ApiCredential\";\nEOF)",
+      "Bash(psql $DATABASE_URL -c \"SELECT \\\\\"name\\\\\", \\\\\"apiUrl\\\\\", \\\\\"isActive\\\\\", CASE WHEN \\\\\"apiKey\\\\\" IS NULL THEN 'NOT SET' ELSE SUBSTRING\\(\\\\\"apiKey\\\\\", 1, 8\\) || '...' END as apiKeyPrefix FROM \\\\\"ApiCredential\\\\\";\" 2>&1)",
+      "Bash(pm2 logs meowsms-web-1 --lines 100 --nostream 2>&1)",
+      "Bash(node scripts/update-api.js 2>&1)",
+      "Bash(npx tsx scripts/update-api.js 2>&1)",
+      "Bash(env | grep -i database | head -1 || echo \"DATABASE_URL not in env\")",
+      "Bash(PGPASSWORD='Stark+40843431' psql -h localhost -U meowsms -d meowsms -c \"SELECT \\\\\"id\\\\\", \\\\\"name\\\\\", \\\\\"apiUrl\\\\\", \\\\\"apiKey\\\\\", \\\\\"isActive\\\\\" FROM \\\\\"ApiCredential\\\\\";\" 2>&1)",
+      "Bash(PGPASSWORD='Stark++@9798' psql -h localhost -U meowsms -d meowsms -c \"SELECT \\\\\"id\\\\\", \\\\\"name\\\\\", \\\\\"apiUrl\\\\\", \\\\\"apiKey\\\\\", \\\\\"isActive\\\\\" FROM \\\\\"ApiCredential\\\\\";\" 2>&1)",
+      "Bash(export PGPASSWORD='Stark++@843431' && psql -h localhost -U meowsms -d meowsms -c \"SELECT \\\\\"id\\\\\", \\\\\"name\\\\\", \\\\\"apiUrl\\\\\", \\\\\"apiKey\\\\\", \\\\\"isActive\\\\\" FROM \\\\\"ApiCredential\\\\\";\" 2>&1)",
+      "Bash(export PGPASSWORD='Stark++@843431' && psql -h localhost -U meowsms -d meowsms -c \"SELECT s.\\\\\"id\\\\\", s.\\\\\"name\\\\\", s.\\\\\"countryCode\\\\\", s.\\\\\"apiId\\\\\", a.\\\\\"apiUrl\\\\\", a.\\\\\"apiKey\\\\\" FROM \\\\\"OtpServer\\\\\" s JOIN \\\\\"ApiCredential\\\\\" a ON s.\\\\\"apiId\\\\\" = a.\\\\\"id\\\\\" WHERE a.\\\\\"isActive\\\\\" = true;\" 2>&1)",
+      "Bash(export PGPASSWORD='Stark++@843431' && psql -h localhost -U meowsms -d meowsms -c \"UPDATE \\\\\"OtpServer\\\\\" SET \\\\\"apiId\\\\\" = 'cmmbtnxj20000pj46pnia47hn' WHERE \\\\\"id\\\\\" = 'cmmbvx8h50001nw46o0bw4izm';\" 2>&1)",
+      "Bash(export PGPASSWORD='Stark++@843431' && psql -h localhost -U meowsms -d meowsms -c \"SELECT s.\\\\\"id\\\\\", s.\\\\\"name\\\\\", s.\\\\\"countryCode\\\\\", s.\\\\\"apiId\\\\\", a.\\\\\"apiUrl\\\\\", a.\\\\\"apiKey\\\\\" FROM \\\\\"OtpServer\\\\\" s JOIN \\\\\"ApiCredential\\\\\" a ON s.\\\\\"apiId\\\\\" = a.\\\\\"id\\\\\";\" 2>&1)",
+      "Bash(export PGPASSWORD='Stark++@843431' && psql -h localhost -U meowsms -d meowsms -c \"SELECT s.\\\\\"id\\\\\", s.\\\\\"code\\\\\", s.\\\\\"name\\\\\", s.\\\\\"serverId\\\\\", srv.\\\\\"name\\\\\" as serverName, s.\\\\\"isActive\\\\\" FROM \\\\\"Service\\\\\" s JOIN \\\\\"OtpServer\\\\\" srv ON s.\\\\\"serverId\\\\\" = srv.\\\\\"id\\\\\" LIMIT 5;\" 2>&1)",
+      "Bash(export PGPASSWORD='Stark++@843431' && psql -h localhost -U meowsms -d meowsms -c \"SELECT * FROM \\\\\"Settings\\\\\";\" 2>&1)",
+      "Bash(npx tsx prisma/make-admin.ts)",
+      "Bash(PGPASSWORD='Stark++@843431' psql -h localhost -U meowsms -d meowsms -c \"UPDATE \\\\\"User\\\\\" SET \\\\\"isAdmin\\\\\" = true WHERE \\\\\"telegramId\\\\\" = '7910804076';\")",
+      "Bash(PGPASSWORD='Stark++@843431' psql -h localhost -U meowsms -d meowsms -c \"SELECT \\\\\"telegramId\\\\\", \\\\\"firstName\\\\\", \\\\\"telegramUsername\\\\\", \\\\\"isAdmin\\\\\" FROM \\\\\"User\\\\\" WHERE \\\\\"telegramId\\\\\" = '7910804076';\")",
+      "Bash(PGPASSWORD='Stark++@843431' psql -h localhost -U meowsms -d meowsms -c \"SELECT id FROM \\\\\"User\\\\\" WHERE \\\\\"telegramId\\\\\" = '7910804076';\")",
+      "Bash(PGPASSWORD='Stark++@843431' psql -h localhost -U meowsms -d meowsms -c \"DELETE FROM \\\\\"Session\\\\\" WHERE \\\\\"userId\\\\\" = 'rlyDtzTm5AjYfPYyG7EDYvQGtn6qSstm';\")",
+      "Bash(PGPASSWORD='Stark++@843431' psql -h localhost -U meowsms -d meowsms -c \"SELECT \\\\\"telegramId\\\\\", \\\\\"isAdmin\\\\\" FROM \\\\\"User\\\\\" WHERE \\\\\"telegramId\\\\\" = '7910804076';\")",
+      "mcp__postgres__list_objects",
+      "mcp__postgres__list_schemas",
+      "mcp__postgres__get_object_details",
+      "mcp__postgres__execute_sql"
     ]
   }
 }

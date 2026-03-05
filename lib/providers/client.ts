@@ -59,6 +59,11 @@
     private async makeRequest(action: string, params: Record<string, string> = {}): Promise<string> {
       const url = this.buildUrl(action, params);
 
+      console.log(`[OTP Provider] Request:`, {
+        action,
+        url: url.replace(this.apiKey, '***KEY***'),
+      });
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -69,15 +74,26 @@
         });
 
         if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          console.error(`[OTP Provider] Error response:`, {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText.substring(0, 200),
+          });
           throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
         }
 
         const text = await response.text();
+        console.log(`[OTP Provider] Success response:`, {
+          action,
+          response: text.substring(0, 100),
+        });
         return text.trim();
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           throw new Error('Request timeout');
         }
+        console.error(`[OTP Provider] Fetch error:`, error);
         throw error;
       } finally {
         clearTimeout(timeoutId);

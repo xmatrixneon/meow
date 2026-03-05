@@ -164,7 +164,7 @@ export default function WalletPage() {
   const totalRecharge = Number(walletData?.totalRecharge ?? 0);
 
   const transactions =
-    transactionsData?.transactions?.filter((tx) => tx.type !== "PURCHASE") ||
+    transactionsData?.transactions?.filter((tx) => tx.type === "DEPOSIT") ||
     [];
 
   const handleNav = useCallback((href: string) => router.push(href), [router]);

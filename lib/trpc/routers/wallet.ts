@@ -92,14 +92,24 @@ export const walletRouter = createTRPCRouter({
       ]);
 
       // Accurate statistics from actual data
-      const [numberCount, totalSpentFromNumbers, totalTopup] =
+      const [numberCount, numberCountWithSms, totalSpentFromNumbers, totalTopup] =
         await Promise.all([
+          // Total completed numbers (purchased)
           prisma.activeNumber.count({
             where: {
               userId,
               status: "COMPLETED",
             },
           }),
+          // Numbers with SMS received (actual used)
+          prisma.activeNumber.count({
+            where: {
+              userId,
+              status: "COMPLETED",
+              smsContent: { not: null },
+            },
+          }),
+          // Total spent on completed numbers
           prisma.activeNumber.aggregate({
             where: {
               userId,
@@ -107,6 +117,7 @@ export const walletRouter = createTRPCRouter({
             },
             _sum: { price: true },
           }),
+          // Total deposits + refunds
           prisma.transaction.aggregate({
             where: {
               walletId: wallet.id,
@@ -135,6 +146,7 @@ export const walletRouter = createTRPCRouter({
         total,
         statistics: {
           numberCount,
+          numberCountWithSms,
           totalSpent: toNumber(totalSpentFromNumbers._sum.price),
           totalTopup: toNumber(totalTopup._sum.amount),
         },

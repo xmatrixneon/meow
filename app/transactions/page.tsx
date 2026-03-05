@@ -1,22 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useDebounce } from "@/hooks/use-debounce";
+import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Hash,
-  Clock,
   Wallet,
   TrendingUp,
   TrendingDown,
-  CheckCircle2,
   MessageSquare,
   Zap,
-  Gift,
-  Settings,
   CreditCard,
-  Sparkles,
   IndianRupee,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,13 +24,13 @@ const fadeUp = (delay = 0) => ({
   transition: { type: "spring" as const, stiffness: 280, damping: 24, delay },
 });
 
-type TxStatus = "all" | "completed" | "pending" | "failed";
+type TxType = "numbers" | "refunds" | "deposits" | "all";
 
-const filters: { label: string; value: TxStatus }[] = [
-  { label: "All",       value: "all"       },
-  { label: "Completed", value: "completed" },
-  { label: "Pending",   value: "pending"   },
-  { label: "Failed",    value: "failed"    },
+const filters: { label: string; value: TxType; icon: any }[] = [
+  { label: "Numbers",   value: "numbers",  icon: <CreditCard size={14} /> },
+  { label: "Refunds",   value: "refunds",  icon: <Zap size={14} /> },
+  { label: "Deposits",  value: "deposits", icon: <Wallet size={14} /> },
+  { label: "All",       value: "all",       icon: <Hash size={14} /> },
 ];
 
 const statusConfig = {
@@ -152,37 +146,45 @@ function TransactionsSkeleton() {
 }
 
 export default function TransactionsPage() {
-  const [filter, setFilter]       = useState<TxStatus>("all");
+  const [filter, setFilter]       = useState<TxType>("numbers");
   const [txOffset, setTxOffset]   = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user;
 
-  const debouncedFilter = useDebounce(filter, 300);
-
   const { data: walletData } = trpc.wallet.balance.useQuery(undefined, {
     enabled: !!user,
   });
 
   const { data } = trpc.wallet.transactions.useQuery(
-    { limit: 20, offset: txOffset, status: debouncedFilter.toUpperCase() as any },
+    { limit: 50, offset: txOffset, status: "ALL" },
     { staleTime: 30 * 1000 }
   );
 
-  useEffect(() => { setTxOffset(0); }, [debouncedFilter]);
-
   const allTransactions = data?.transactions || [];
   const total           = data?.total        || 0;
-  const hasMore         = txOffset + 20 < total;
+  const hasMore         = txOffset + 50 < total;
+
+  // Filter transactions based on selected type
+  const filteredTransactions = filter === "all"
+    ? allTransactions
+    : allTransactions.filter(tx => {
+        if (filter === "numbers") return tx.type === "PURCHASE";
+        if (filter === "refunds") return tx.type === "REFUND";
+        if (filter === "deposits") return tx.type === "DEPOSIT";
+        return true;
+      });
+
+  const filteredTotal = filter === "all" ? total : filteredTransactions.length;
 
   // ── same pattern as profile / wallet ──
   const balance        = Number(walletData?.balance        ?? 0);
   const totalSpent     = Number(walletData?.totalSpent     ?? 0);
   const totalRecharge  = Number(walletData?.totalRecharge  ?? 0);
 
-  // derive numberCount from purchase transactions
-  const numberCount = allTransactions.filter(tx => tx.type === "PURCHASE").length;
+  // Use backend statistics for accurate counts
+  const numberCount = data?.statistics?.numberCountWithSms ?? 0;
 
   if (isPending && !user) return <TransactionsSkeleton />;
 
@@ -257,24 +259,28 @@ export default function TransactionsPage() {
               </div>
             </div>
 
-            {/* Total transactions + numbers used */}
+            {/* Transaction stats */}
             <div className="mt-4 pt-4 border-t border-primary/15 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Hash size={12} className="text-primary" />
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <CreditCard size={12} className="text-amber-500" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Total transactions</p>
-                  <p className="text-sm font-bold text-foreground tabular-nums">{total}</p>
+                  <p className="text-[10px] text-muted-foreground">Numbers bought</p>
+                  <p className="text-sm font-bold text-foreground tabular-nums">
+                    {allTransactions.filter(t => t.type === "PURCHASE").length}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <CheckCircle2 size={12} className="text-primary" />
+                <div className="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
+                  <Zap size={12} className="text-sky-500" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Numbers used</p>
-                  <p className="text-sm font-bold text-foreground tabular-nums">{numberCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Refunds</p>
+                  <p className="text-sm font-bold text-foreground tabular-nums">
+                    {allTransactions.filter(t => t.type === "REFUND").length}
+                  </p>
                 </div>
               </div>
             </div>
@@ -289,20 +295,38 @@ export default function TransactionsPage() {
               type="button"
               onClick={() => setFilter(f.value)}
               className={cn(
-                "px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors duration-200 border",
+                "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors duration-200 border",
                 filter === f.value
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-card text-muted-foreground border-border hover:border-primary/40"
               )}
             >
-              {f.label}
+              {f.icon}
+              <span>{f.label}</span>
+              <span className={cn(
+                "px-1.5 py-0.5 rounded-full text-[10px]",
+                filter === f.value
+                  ? "bg-primary-foreground/20"
+                  : "bg-muted"
+              )}>
+                {filter === f.value
+                  ? filteredTotal
+                  : f.value === "all"
+                    ? total
+                    : f.value === "numbers"
+                      ? allTransactions.filter(t => t.type === "PURCHASE").length
+                      : f.value === "refunds"
+                        ? allTransactions.filter(t => t.type === "REFUND").length
+                        : allTransactions.filter(t => t.type === "DEPOSIT").length
+                }
+              </span>
             </button>
           ))}
         </motion.div>
 
         {/* ── List ── */}
         <AnimatePresence mode="popLayout">
-          {allTransactions.length === 0 ? (
+          {filteredTransactions.length === 0 ? (
             <motion.div
               key="empty"
               initial={{ opacity: 0, y: 10 }}
@@ -312,16 +336,28 @@ export default function TransactionsPage() {
               className="flex flex-col items-center justify-center py-16 gap-3"
             >
               <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-                <Wallet size={22} className="text-muted-foreground" />
+                {filter === "numbers" && <CreditCard size={22} className="text-muted-foreground" />}
+                {filter === "refunds" && <Zap size={22} className="text-muted-foreground" />}
+                {filter === "deposits" && <Wallet size={22} className="text-muted-foreground" />}
+                {filter === "all" && <Hash size={22} className="text-muted-foreground" />}
               </div>
-              <p className="text-sm text-muted-foreground">No transactions found</p>
+              <p className="text-sm text-muted-foreground">
+                {filter === "all"
+                  ? "No transactions found"
+                  : filter === "numbers"
+                    ? "No numbers purchased yet"
+                    : filter === "refunds"
+                      ? "No refunds yet"
+                      : "No deposits yet"
+                }
+              </p>
             </motion.div>
           ) : (
             <motion.div
               key="list"
               className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/60"
             >
-              {allTransactions.map((tx, i) => {
+              {filteredTransactions.map((tx, i) => {
                 const colorConfig = getTransactionColor(tx.type);
                 const isCredit = ["DEPOSIT", "PROMO", "REFERRAL", "REFUND", "ADJUSTMENT"].includes(tx.type);
                 const title    = getTransactionTitle(tx);
@@ -346,22 +382,51 @@ export default function TransactionsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm text-foreground truncate">{title}</p>
                       <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
-                      {tx.type === "PURCHASE" && (tx.metadata as any)?.smsReceived && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <MessageSquare size={9} className="text-green-500" />
-                          <span className="text-[10px] text-green-500">SMS received</span>
-                        </div>
+
+                      {/* PURCHASE: Show service, SMS status, order ID */}
+                      {tx.type === "PURCHASE" && (
+                        <>
+                          {(tx.metadata as any)?.serviceName && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
+                              {(tx.metadata as any)?.serviceName}
+                            </span>
+                          )}
+                          {(tx.metadata as any)?.smsReceived && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <MessageSquare size={9} className="text-green-500" />
+                              <span className="text-[10px] text-green-500">SMS received</span>
+                            </div>
+                          )}
+                          {(tx.metadata as any)?.orderId && (
+                            <span className="text-[10px] text-muted-foreground/70 font-mono block mt-0.5">
+                              #{(tx.metadata as any)?.orderId?.substring(0, 8)}...
+                            </span>
+                          )}
+                        </>
                       )}
-                      {tx.type === "PURCHASE" && (tx.metadata as any)?.serviceName && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
-                          {(tx.metadata as any)?.serviceName}
-                        </span>
+
+                      {/* REFUND: Show service name and phone number */}
+                      {tx.type === "REFUND" && (
+                        <>
+                          {(tx.metadata as any)?.serviceName && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-500 inline-block mt-1">
+                              {(tx.metadata as any)?.serviceName}
+                            </span>
+                          )}
+                          {(tx.metadata as any)?.phoneNumber && (
+                            <span className="text-[10px] text-sky-600/70 block mt-0.5">
+                              {(tx.metadata as any)?.phoneNumber}
+                            </span>
+                          )}
+                          {(tx.metadata as any)?.orderId && (
+                            <span className="text-[10px] text-muted-foreground/70 font-mono">
+                              #{(tx.metadata as any)?.orderId?.substring(0, 8)}...
+                            </span>
+                          )}
+                        </>
                       )}
-                      {tx.type === "PURCHASE" && (tx.metadata as any)?.orderId && (
-                        <span className="text-[10px] text-muted-foreground/70 font-mono">
-                          #{(tx.metadata as any)?.orderId?.substring(0, 8)}...
-                        </span>
-                      )}
+
+                      {/* DEPOSIT: Show transaction date */}
                       {tx.type === "DEPOSIT" && (tx.metadata as any)?.transactionDate && (
                         <span className="text-[10px] text-muted-foreground/70">
                           {new Date((tx.metadata as any)?.transactionDate).toLocaleDateString()}
@@ -392,7 +457,7 @@ export default function TransactionsPage() {
         </AnimatePresence>
 
         {/* ── Footer summary ── */}
-        {allTransactions.length > 0 && (
+        {filteredTransactions.length > 0 && (
           <>
             <motion.div
               {...fadeUp(0.22)}
@@ -402,7 +467,7 @@ export default function TransactionsPage() {
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Showing</p>
                   <p className="text-sm font-bold text-foreground">
-                    {allTransactions.length} of {total} transactions
+                    {filteredTransactions.length} of {filteredTotal} {filter === "all" ? "total" : filter}
                   </p>
                 </div>
                 <div className="text-right">
@@ -428,10 +493,11 @@ export default function TransactionsPage() {
               </div>
             </motion.div>
 
-            {hasMore && (
+            {/* Only show load more for "all" filter since we fetch 50 at once */}
+            {filter === "all" && hasMore && (
               <motion.div {...fadeUp(0.28)} className="flex justify-center py-4">
                 <button
-                  onClick={() => { setLoadingMore(true); setTxOffset((prev) => prev + 20); }}
+                  onClick={() => { setLoadingMore(true); setTxOffset((prev) => prev + 50); }}
                   disabled={loadingMore}
                   className="px-6 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-200"
                 >
