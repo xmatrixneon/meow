@@ -23,10 +23,14 @@ import {
   RefreshCw,
   Key,
   Clock,
+  BookOpen,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc/client";
+import { ApiDocsDialog } from "@/components/api-docs-dialog";
+import { SupportDialog } from "@/components/support-dialog";
+import { LegalDialog } from "@/components/legal-dialog";
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
@@ -198,10 +202,16 @@ export default function ProfilePage() {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [apiDocsOpen, setApiDocsOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [legalOpen, setLegalOpen] = useState(false);
 
   // ✅ single source of truth
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user as User | undefined;
+
+  // Get settings for telegram help URL
+  const { data: settings } = trpc.service.settings.useQuery();
 
   // Get wallet data with real statistics
   const { data: walletData } = trpc.wallet.balance.useQuery(undefined, {
@@ -407,10 +417,18 @@ export default function ProfilePage() {
           {...fadeUp(0.1)}
           className="bg-card border border-border rounded-2xl overflow-hidden"
         >
-          <div className="px-5 py-4 border-b border-border/60">
+          <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60">
               API Access
             </p>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setApiDocsOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/5 hover:bg-primary/10 border border-primary/10 text-primary text-xs font-medium transition-colors"
+            >
+              <BookOpen size={12} />
+              API Docs
+            </motion.button>
           </div>
           <div className="p-4 space-y-3">
             <p className="text-xs text-muted-foreground">
@@ -496,18 +514,12 @@ export default function ProfilePage() {
             <SettingsRow
               icon={HelpCircle}
               label="Help & FAQ"
-              onClick={() => router.push("/help")}
+              onClick={() => setSupportOpen(true)}
             />
             <SettingsRow
               icon={FileText}
               label="Terms & Privacy"
-              trailing={
-                <ExternalLink
-                  size={14}
-                  className="text-muted-foreground/50 shrink-0"
-                />
-              }
-              onClick={() => window.open("https://meowsms.com/legal", "_blank")}
+              onClick={() => setLegalOpen(true)}
             />
           </SettingsCard>
         </div>
@@ -519,6 +531,26 @@ export default function ProfilePage() {
           MeowSMS v1.0.0 · Built with 🐾
         </motion.p>
       </div>
+
+      {/* API Docs Dialog */}
+      <ApiDocsDialog
+        open={apiDocsOpen}
+        onOpenChange={setApiDocsOpen}
+        apiKey={apiKeyData?.apiKey ?? ""}
+      />
+
+      {/* Support Dialog */}
+      <SupportDialog
+        open={supportOpen}
+        onOpenChange={setSupportOpen}
+        telegramHelpUrl={settings?.telegramHelpUrl}
+      />
+
+      {/* Legal Dialog */}
+      <LegalDialog
+        open={legalOpen}
+        onOpenChange={setLegalOpen}
+      />
     </div>
   );
 }

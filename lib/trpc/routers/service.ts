@@ -36,6 +36,7 @@ export const serviceRouter = createTRPCRouter({
         referralPercent: settings?.referralPercent,
         minRedeem: settings?.minRedeem,
         numberExpiryMinutes: settings?.numberExpiryMinutes,
+        telegramHelpUrl: settings?.telegramHelpUrl,
       };
     } catch (error) {
       throw new TRPCError({
