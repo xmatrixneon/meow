@@ -319,6 +319,7 @@ function NumberCard({
   minCancelMs,
   onNextNumber,
   buyingNextNumberId,
+  cancellingId,
 }: {
   item: TempNumber;
   delay: number;
@@ -326,6 +327,7 @@ function NumberCard({
   minCancelMs: number;
   onNextNumber?: (serviceId: string, serverId: string, orderId: string) => void;
   buyingNextNumberId?: string | null;
+  cancellingId?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [expiresIn, setExpiresIn] = useState(() =>
@@ -349,6 +351,7 @@ function NumberCard({
   const isReceived = item.smsReceived || hasSms;
   const isCancelled = item.status === "cancelled";
   const canCancel = cancelRemainingMs === 0;
+  const isCancelling = cancellingId === item.orderId;
 
   const displayStatus: TabValue = isReceived
     ? "received"
@@ -544,10 +547,19 @@ function NumberCard({
             <motion.button
               whileTap={{ scale: 0.96 }}
               type="button"
-              onClick={() => onCancel(item.orderId)}
-              className="flex items-center justify-center w-9 h-9 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors shrink-0"
+              onClick={() => !isCancelling && onCancel(item.orderId)}
+              disabled={isCancelling}
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Trash2 size={14} />
+              {isCancelling ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                  className="w-3.5 h-3.5 rounded-full border-2 border-destructive/30 border-t-destructive"
+                />
+              ) : (
+                <Trash2 size={14} />
+              )}
             </motion.button>
           ) : (
             <TooltipProvider>
@@ -581,13 +593,10 @@ const TABS: { label: string; value: TabValue; icon: React.ElementType }[] = [
   { label: "Cancelled", value: "cancelled", icon: Trash2 },
 ];
 
-// Remove CountBadge since we're using inline count badges like transactions page
-
 export default function NumbersPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("waiting");
-  const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(
-    null,
-  );
+  const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const utils = trpc.useUtils();
@@ -600,11 +609,6 @@ export default function NumbersPage() {
   }, []);
 
   // ── Queries ────────────────────────────────────────────────────────────────
-
-  /**
-   * getActive is now a pure DB read — fetch.mjs handles all provider polling.
-   * We just refetch every 3s to pick up changes the poller wrote to the DB.
-   */
   const { data: activeData } = trpc.number.getActive.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 0,
@@ -633,9 +637,9 @@ export default function NumbersPage() {
   const minCancelMs = (settingsData?.minCancelMinutes ?? 2) * 60 * 1000;
 
   // ── Mutations ──────────────────────────────────────────────────────────────
-
   const cancelMutation = trpc.number.cancel.useMutation({
     onSuccess: (data) => {
+      setCancellingId(null);
       utils.number.getActive.invalidate();
       utils.number.getCancelledInfinite.invalidate();
       utils.wallet.balance.invalidate();
@@ -643,6 +647,7 @@ export default function NumbersPage() {
       toast.success(`Refunded ₹${Number(data.refundedAmount ?? 0).toFixed(2)}`);
     },
     onError: (err) => {
+      setCancellingId(null);
       const msg = err.message || "Failed to cancel";
       if (msg.includes("wait") || msg.includes("seconds")) {
         toast.error(msg);
@@ -670,17 +675,13 @@ export default function NumbersPage() {
     },
   });
 
-  // ── Invalidate received/cancelled when active tab changes ─────────────────
-  // When fetch.mjs closes a number (expired/cancelled), getActive will stop
-  // returning it. We then need received/cancelled lists to be up to date.
-
+  // ── Invalidate received/cancelled when numbers disappear from active ───────
   const prevActiveIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const currentIds = new Set(activeData?.numbers.map((n) => n.id) ?? []);
     const prevIds = prevActiveIdsRef.current;
 
-    // Some numbers disappeared from active — they moved to received/cancelled
     const removed = [...prevIds].filter((id) => !currentIds.has(id));
     if (removed.length > 0) {
       utils.number.getReceivedInfinite.invalidate();
@@ -692,7 +693,6 @@ export default function NumbersPage() {
   }, [activeData, utils]);
 
   // ── Data transformation ────────────────────────────────────────────────────
-
   const numbers: TempNumber[] = useMemo(() => {
     return (
       activeData?.numbers.map((n) => {
@@ -785,12 +785,11 @@ export default function NumbersPage() {
 
   // ── SMS arrival notification ───────────────────────────────────────────────
   useEffect(() => {
-    if (!activeData) return; // wait for real data
+    if (!activeData) return;
 
     const smsCount = numbers.filter((n) => n.sms || n.smsList).length;
 
     if (!initializedRef.current) {
-      // First real data — set baseline silently, never fire sound
       prevSmsCountRef.current = smsCount;
       initializedRef.current = true;
       return;
@@ -805,9 +804,11 @@ export default function NumbersPage() {
   }, [numbers, activeData]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-
   const handleCancel = useCallback(
-    (orderId: string) => cancelMutation.mutate({ orderId }),
+    (orderId: string) => {
+      setCancellingId(orderId);
+      cancelMutation.mutate({ orderId });
+    },
     [cancelMutation],
   );
 
@@ -830,7 +831,6 @@ export default function NumbersPage() {
   };
 
   // ── Derived state ──────────────────────────────────────────────────────────
-
   const counts = {
     waiting: numbers.length,
     received: receivedNumbers.length,
@@ -852,7 +852,6 @@ export default function NumbersPage() {
         : false;
 
   // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
@@ -915,12 +914,7 @@ export default function NumbersPage() {
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{
-            type: "spring",
-            stiffness: 280,
-            damping: 24,
-            delay: 0.06,
-          }}
+          transition={{ type: "spring", stiffness: 280, damping: 24, delay: 0.06 }}
           className="flex gap-2 overflow-x-auto pb-0.5"
         >
           {TABS.map((tab) => {
@@ -1008,6 +1002,7 @@ export default function NumbersPage() {
                   onCancel={activeTab === "waiting" ? handleCancel : undefined}
                   onNextNumber={handleNextNumber}
                   buyingNextNumberId={buyingNextNumberId}
+                  cancellingId={cancellingId}
                 />
               ))}
 
@@ -1023,11 +1018,7 @@ export default function NumbersPage() {
                     <div className="flex items-center justify-center gap-2">
                       <motion.div
                         animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 0.8,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
+                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
                         className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
                       />
                       Loading…
