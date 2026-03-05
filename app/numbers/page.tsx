@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc/client";
+import { playNotificationSound, preloadNotificationSound } from "@/lib/sound";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -575,7 +576,7 @@ function NumberCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { label: string; value: TabValue; icon: React.ElementType }[] = [
-  { label: "Waiting",  value: "waiting",  icon: Clock },
+  { label: "Waiting", value: "waiting", icon: Clock },
   { label: "Received", value: "received", icon: CheckCheck },
   { label: "Cancelled", value: "cancelled", icon: Trash2 },
 ];
@@ -591,6 +592,11 @@ export default function NumbersPage() {
   const [prevSmsCount, setPrevSmsCount] = useState(0);
 
   const utils = trpc.useUtils();
+
+  // ── Preload sound on mount ─────────────────────────────────────────────────
+  useEffect(() => {
+    preloadNotificationSound();
+  }, []);
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -778,10 +784,12 @@ export default function NumbersPage() {
 
   // ── SMS arrival notification ───────────────────────────────────────────────
 
+  // ── SMS arrival notification ───────────────────────────────────────────────
   useEffect(() => {
     const smsCount = numbers.filter((n) => n.sms || n.smsList).length;
-    if (smsCount > prevSmsCount && prevSmsCount >= 0) {
-      if (smsCount > 0) toast.success("🎉 SMS received!");
+    if (smsCount > prevSmsCount && smsCount > 0) {
+      toast.success("🎉 SMS received!");
+      playNotificationSound(); // ← inside the condition
     }
     const id = setTimeout(() => setPrevSmsCount(smsCount), 0);
     return () => clearTimeout(id);
@@ -927,9 +935,7 @@ export default function NumbersPage() {
                 <span
                   className={cn(
                     "px-1.5 py-0.5 rounded-full text-[10px]",
-                    isActive
-                      ? "bg-primary-foreground/20"
-                      : "bg-muted",
+                    isActive ? "bg-primary-foreground/20" : "bg-muted",
                   )}
                 >
                   {count}
