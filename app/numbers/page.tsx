@@ -118,22 +118,6 @@ function parseSmsContent(raw: unknown): {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function CountBadge({ count, active }: { count: number; active: boolean }) {
-  if (count === 0) return null;
-  return (
-    <span
-      className={cn(
-        "ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-        active
-          ? "bg-primary-foreground/20 text-primary-foreground"
-          : "bg-muted text-muted-foreground",
-      )}
-    >
-      {count}
-    </span>
-  );
-}
-
 function SmsItem({ sms, index }: { sms: SmsEntry; index: number }) {
   const [copied, setCopied] = useState(false);
   const otp = sms.content.match(/\b\d{4,8}\b/)?.[0];
@@ -591,10 +575,12 @@ function NumberCard({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS: { label: string; value: TabValue; icon: React.ElementType }[] = [
-  { label: "Waiting", value: "waiting", icon: Clock },
+  { label: "Waiting",  value: "waiting",  icon: Clock },
   { label: "Received", value: "received", icon: CheckCheck },
   { label: "Cancelled", value: "cancelled", icon: Trash2 },
 ];
+
+// Remove CountBadge since we're using inline count badges like transactions page
 
 export default function NumbersPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("waiting");
@@ -918,34 +904,35 @@ export default function NumbersPage() {
             damping: 24,
             delay: 0.06,
           }}
-          className="bg-card border border-border rounded-2xl p-1.5 flex gap-1"
+          className="flex gap-2 overflow-x-auto pb-0.5"
         >
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.value;
+            const count = counts[tab.value];
             return (
               <button
                 key={tab.value}
                 type="button"
                 onClick={() => setActiveTab(tab.value)}
                 className={cn(
-                  "relative flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-colors duration-200",
+                  "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-colors duration-200 border",
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-muted-foreground border-border hover:border-primary/40",
                 )}
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="tab-bg"
-                    className="absolute inset-0 bg-primary rounded-xl"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <span className="relative flex items-center gap-1">
-                  <Icon size={13} strokeWidth={2.5} />
-                  {tab.label}
-                  <CountBadge count={counts[tab.value]} active={isActive} />
+                <Icon size={14} />
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "px-1.5 py-0.5 rounded-full text-[10px]",
+                    isActive
+                      ? "bg-primary-foreground/20"
+                      : "bg-muted",
+                  )}
+                >
+                  {count}
                 </span>
               </button>
             );
