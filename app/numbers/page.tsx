@@ -589,7 +589,7 @@ export default function NumbersPage() {
     null,
   );
   const [loadingMore, setLoadingMore] = useState(false);
-  const [prevSmsCount, setPrevSmsCount] = useState(0);
+  const [prevSmsCount, setPrevSmsCount] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -783,14 +783,20 @@ export default function NumbersPage() {
   }, [cancelledData]);
 
   // ── SMS arrival notification ───────────────────────────────────────────────
-
-  // ── SMS arrival notification ───────────────────────────────────────────────
   useEffect(() => {
     const smsCount = numbers.filter((n) => n.sms || n.smsList).length;
+
+    // null means first render after mount — set baseline without firing sound
+    if (prevSmsCount === null) {
+      setPrevSmsCount(smsCount);
+      return;
+    }
+
     if (smsCount > prevSmsCount && smsCount > 0) {
       toast.success("🎉 SMS received!");
-      playNotificationSound(); // ← inside the condition
+      playNotificationSound();
     }
+
     const id = setTimeout(() => setPrevSmsCount(smsCount), 0);
     return () => clearTimeout(id);
   }, [numbers, prevSmsCount]);
