@@ -1,5 +1,8 @@
 // scripts/set-webhook.ts
 // Run once after deployment: npx tsx scripts/set-webhook.ts
+// scripts/set-webhook.ts
+import { config } from "dotenv";
+config(); // ← load .env first
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;

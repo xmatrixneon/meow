@@ -1,4 +1,7 @@
 // lib/bot.ts
+import { config } from "dotenv";
+config({ path: "/var/www/manager/.env" });
+
 import { Bot } from "grammy";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -10,7 +13,7 @@ const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN);
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
 
 bot.command("start", async (ctx) => {
-  await ctx.replyWithPhoto(`${APP_URL}/meow.png`, {
+  await ctx.replyWithPhoto("https://i.ibb.co/VKDpWf0/meow.png", {
     caption:
       "👋 *Welcome to MeowSMS!*\n\n" +
       "🔐 Get instant virtual phone numbers for OTP verification\n" +
@@ -18,7 +21,7 @@ bot.command("start", async (ctx) => {
       "💰 Pay only when you receive SMS\n\n" +
       "Tap *Open App* below to get started 👇",
     parse_mode: "Markdown",
-    protect_content: true, // ← hides URL on long press, disables forwarding
+    protect_content: true,
     reply_markup: {
       inline_keyboard: [
         [
@@ -32,7 +35,6 @@ bot.command("start", async (ctx) => {
   });
 });
 
-// Handle /help
 bot.command("help", async (ctx) => {
   await ctx.reply(
     "🐱 *MeowSMS Help*\n\n" +

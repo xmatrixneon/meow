@@ -81,5 +81,18 @@ module.exports = {
         NODE_ENV: "production",
       },
     },
+      {
+      name: 'meowsms-bot',
+      script: 'npx',
+      args: 'tsx scripts/bot-polling.ts',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      restart_delay: 3000,
+      max_memory_restart: '200M',
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
   ],
 };
