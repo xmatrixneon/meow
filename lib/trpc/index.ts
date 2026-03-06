@@ -9,7 +9,7 @@ export { createTRPCContext, createTRPCRouter, publicProcedure, protectedProcedur
 export type { Context } from "./trpc";
 
 // Router exports
-export { appRouter, serviceRouter, numberRouter, walletRouter, adminRouter } from "./routers/_app";
+export { appRouter, serviceRouter, numberRouter, walletRouter } from "./routers/_app";
 export type { AppRouter } from "./routers/_app";
 
 // Client-side exports

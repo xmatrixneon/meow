@@ -2,7 +2,6 @@ import { createTRPCRouter } from "../trpc";
 import { serviceRouter } from "./service";
 import { numberRouter } from "./number";
 import { walletRouter } from "./wallet";
-import { adminRouter } from "./admin";
 import { apiKeyRouter } from "./api-key";
 
 /**
@@ -13,7 +12,6 @@ export const appRouter = createTRPCRouter({
   service: serviceRouter,
   number: numberRouter,
   wallet: walletRouter,
-  admin: adminRouter,
   apiKey: apiKeyRouter,
 });
 
@@ -26,4 +24,4 @@ export type AppRouter = typeof appRouter;
 /**
  * Export individual routers for convenience
  */
-export { serviceRouter, numberRouter, walletRouter, adminRouter, apiKeyRouter };
+export { serviceRouter, numberRouter, walletRouter, apiKeyRouter };
