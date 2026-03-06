@@ -42,17 +42,13 @@ const filters: { label: string; value: TxType; icon: any }[] = [
 ];
 
 const statusConfig = {
-  completed: {
-    color: "text-green-500",
-    bg: "bg-green-500/10",
-    label: "Completed",
-  },
-  pending: { color: "text-amber-500", bg: "bg-amber-500/10", label: "Pending" },
-  failed: { color: "text-rose-500", bg: "bg-rose-500/10", label: "Failed" },
+  completed: { color: "text-green-500", bg: "bg-green-500/10", label: "Completed" },
+  pending:   { color: "text-amber-500", bg: "bg-amber-500/10", label: "Pending" },
+  failed:    { color: "text-rose-500",  bg: "bg-rose-500/10",  label: "Failed" },
 } as const;
 
 const getTransactionIcon = (type: string, status: string) => {
-  if (status === "FAILED") return <XCircle size={16} />;
+  if (status === "FAILED")  return <XCircle size={16} />;
   if (status === "PENDING") return <AlertCircle size={16} />;
   switch (type) {
     case "PURCHASE":   return <ShoppingBag size={16} />;
@@ -67,13 +63,13 @@ const getTransactionIcon = (type: string, status: string) => {
 
 const getTransactionColor = (type: string) => {
   switch (type) {
-    case "DEPOSIT":    return { color: "text-green-500",           bg: "bg-green-500/10" };
-    case "PURCHASE":   return { color: "text-amber-500",           bg: "bg-amber-500/10" };
-    case "REFUND":     return { color: "text-sky-500",             bg: "bg-sky-500/10" };
-    case "PROMO":      return { color: "text-violet-500",          bg: "bg-violet-500/10" };
-    case "REFERRAL":   return { color: "text-pink-500",            bg: "bg-pink-500/10" };
-    case "ADJUSTMENT": return { color: "text-orange-500",          bg: "bg-orange-500/10" };
-    default:           return { color: "text-muted-foreground",    bg: "bg-muted" };
+    case "DEPOSIT":    return { color: "text-green-500",        bg: "bg-green-500/10" };
+    case "PURCHASE":   return { color: "text-amber-500",        bg: "bg-amber-500/10" };
+    case "REFUND":     return { color: "text-sky-500",          bg: "bg-sky-500/10" };
+    case "PROMO":      return { color: "text-violet-500",       bg: "bg-violet-500/10" };
+    case "REFERRAL":   return { color: "text-pink-500",         bg: "bg-pink-500/10" };
+    case "ADJUSTMENT": return { color: "text-orange-500",       bg: "bg-orange-500/10" };
+    default:           return { color: "text-muted-foreground", bg: "bg-muted" };
   }
 };
 
@@ -106,23 +102,22 @@ const getTransactionTitle = (tx: {
 
   switch (type) {
     case "DEPOSIT":    return "Deposit";
-    case "PROMO":      return "Promo";
+    case "PROMO":      return "Promo Redeemed";
     case "REFERRAL":   return "Bonus";
     case "ADJUSTMENT": return "Adjustment";
     default:           return "Transaction";
   }
 };
 
-// ✅ description added to both the type and the destructure
 const getTransactionSubtitle = (tx: {
   type: string;
-  description: string | null; // ← added
+  description: string | null;
   metadata: any;
   createdAt: string;
   status: string;
   phoneNumber: string | null;
 }) => {
-  const { type, description, metadata, createdAt, status, phoneNumber } = tx; // ← added
+  const { type, description, metadata, createdAt, status, phoneNumber } = tx;
   if (status === "PENDING") return "Pending";
   if (status === "FAILED")  return "Failed";
   switch (type) {
@@ -133,7 +128,7 @@ const getTransactionSubtitle = (tx: {
     case "REFUND":
       return phoneNumber || metadata?.serviceName || "Refunded";
     case "PROMO":
-      return metadata?.promocodeCode || metadata?.code || description || "Promo Code";
+      return "Promo code applied";
     case "REFERRAL":
       return "Referral";
     case "ADJUSTMENT":
@@ -259,6 +254,7 @@ export default function TransactionsPage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
+
         {/* ── Hero ── */}
         <motion.div
           {...fadeUp(0)}
@@ -417,6 +413,7 @@ export default function TransactionsPage() {
                       <p className="font-semibold text-sm text-foreground truncate">{title}</p>
                       <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
 
+                      {/* PURCHASE: SMS badge */}
                       {tx.type === "PURCHASE" && (tx.metadata as any)?.smsReceived && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <MessageSquare size={9} className="text-green-500" />
@@ -424,6 +421,7 @@ export default function TransactionsPage() {
                         </div>
                       )}
 
+                      {/* REFUND: service name badge */}
                       {tx.type === "REFUND" && (tx.metadata as any)?.serviceName && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <Zap size={9} className="text-sky-500" />
@@ -431,13 +429,15 @@ export default function TransactionsPage() {
                         </div>
                       )}
 
-                      {tx.type === "PROMO" && (tx.metadata as any)?.promocodeCode && (
+                      {/* PROMO: clean badge, no raw code */}
+                      {tx.type === "PROMO" && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <Gift size={9} className="text-violet-500" />
-                          <span className="text-[10px] text-violet-500">{(tx.metadata as any)?.promocodeCode}</span>
+                          <span className="text-[10px] text-violet-500">Balance credited</span>
                         </div>
                       )}
 
+                      {/* DEPOSIT: transaction date */}
                       {tx.type === "DEPOSIT" && (tx.metadata as any)?.transactionDate && (
                         <span className="text-[10px] text-muted-foreground/70">
                           {new Date((tx.metadata as any)?.transactionDate).toLocaleDateString()}
