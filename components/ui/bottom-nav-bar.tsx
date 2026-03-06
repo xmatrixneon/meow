@@ -1,25 +1,18 @@
 "use client";
+
 import { motion } from "framer-motion";
-import {
-  Home,
-  Wallet,
-  User,
-  PhoneCallIcon,
-  History,
-} from "lucide-react";
+import { Home, Wallet, User, PhoneCallIcon, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { label: "Home",     icon: Home,          href: "/"         },
-  { label: "Numbers",  icon: PhoneCallIcon, href: "/numbers"  },
-  { label: "Wallet",   icon: Wallet,        href: "/wallet"   },
-  { label: "Transactions", icon: History, href: "/transactions" },
-  { label: "Profile",  icon: User,          href: "/profile"  },
+  { label: "Home",         icon: Home,          href: "/"             },
+  { label: "Numbers",      icon: PhoneCallIcon, href: "/numbers"      },
+  { label: "Wallet",       icon: Wallet,        href: "/wallet"       },
+  { label: "Transactions", icon: History,       href: "/transactions" },
+  { label: "Profile",      icon: User,          href: "/profile"      },
 ];
-
-const MOBILE_LABEL_WIDTH = 72;
 
 type BottomNavBarProps = {
   className?: string;
@@ -46,13 +39,13 @@ export function BottomNavBar({ className, stickyBottom = true }: BottomNavBarPro
       role="navigation"
       aria-label="Bottom Navigation"
       className={cn(
-        "bg-card dark:bg-card border border-border dark:border-sidebar-border rounded-full flex items-center p-2 shadow-xl space-x-1 min-w-[320px] max-w-[95vw] h-[52px]",
+        "bg-card dark:bg-card border border-border dark:border-sidebar-border rounded-2xl flex items-center px-2 py-1.5 shadow-xl",
         stickyBottom && "fixed inset-x-0 bottom-4 mx-auto z-20 w-fit",
         className,
       )}
     >
       {navItems.map((item, idx) => {
-        const Icon     = item.icon;
+        const Icon = item.icon;
         const isActive = activeIndex === idx;
 
         return (
@@ -65,40 +58,28 @@ export function BottomNavBar({ className, stickyBottom = true }: BottomNavBarPro
             className="focus:outline-none"
           >
             <motion.div
-              whileTap={{ scale: 0.97 }}
+              whileTap={{ scale: 0.92 }}
               className={cn(
-                "flex items-center gap-0 px-3 py-2 rounded-full transition-colors duration-200 h-10 min-w-[44px] min-h-[40px] max-h-[44px]",
+                "flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors duration-200 min-w-[52px]",
                 isActive
-                  ? "bg-primary/10 dark:bg-primary/15 text-primary dark:text-primary gap-2"
-                  : "bg-transparent text-muted-foreground dark:text-muted-foreground hover:bg-muted dark:hover:bg-muted",
+                  ? "bg-primary/10 dark:bg-primary/15 text-primary dark:text-primary"
+                  : "bg-transparent text-muted-foreground hover:bg-muted dark:hover:bg-muted",
               )}
             >
-              <Icon size={22} strokeWidth={2} aria-hidden className="transition-colors duration-200 shrink-0" />
-
-              <motion.div
-                initial={false}
-                animate={{
-                  width:      isActive ? `${MOBILE_LABEL_WIDTH}px` : "0px",
-                  opacity:    isActive ? 1 : 0,
-                  marginLeft: isActive ? "8px" : "0px",
-                }}
-                transition={{
-                  width:      { type: "spring", stiffness: 350, damping: 32 },
-                  opacity:    { duration: 0.19 },
-                  marginLeft: { duration: 0.19 },
-                }}
-                className="overflow-hidden flex items-center max-w-[72px]"
+              <Icon
+                size={20}
+                strokeWidth={isActive ? 2.5 : 2}
+                aria-hidden
+                className="transition-all duration-200 shrink-0"
+              />
+              <span
+                className={cn(
+                  "text-[10px] font-medium whitespace-nowrap select-none leading-tight transition-colors duration-200",
+                  isActive ? "text-primary dark:text-primary" : "text-muted-foreground",
+                )}
               >
-                <span
-                  className={cn(
-                    "font-medium text-xs whitespace-nowrap select-none transition-opacity duration-200 overflow-hidden text-ellipsis text-[clamp(0.625rem,0.5263rem+0.5263vw,1rem)] leading-[1.9]",
-                    isActive ? "text-primary dark:text-primary" : "opacity-0",
-                  )}
-                  title={item.label}
-                >
-                  {item.label}
-                </span>
-              </motion.div>
+                {item.label}
+              </span>
             </motion.div>
           </Link>
         );
