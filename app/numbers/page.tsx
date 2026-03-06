@@ -117,6 +117,12 @@ function parseSmsContent(raw: unknown): {
   return {};
 }
 
+/** Strip country code prefix, return last 10 digits */
+function getLast10Digits(number: string): string {
+  const digits = number.replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SmsItem({ sms, index }: { sms: SmsEntry; index: number }) {
@@ -500,7 +506,9 @@ function NumberCard({
           whileTap={{ scale: 0.96 }}
           type="button"
           onClick={() => {
-            navigator.clipboard.writeText(item.number);
+            // Copy only the last 10 digits, stripping any country code prefix (e.g. 91)
+            const toCopy = getLast10Digits(item.number);
+            navigator.clipboard.writeText(toCopy);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
           }}
@@ -603,12 +611,10 @@ export default function NumbersPage() {
   const initializedRef = useRef(false);
   const prevSmsCountRef = useRef(0);
 
-  // ── Preload sound on mount ─────────────────────────────────────────────────
   useEffect(() => {
     preloadNotificationSound();
   }, []);
 
-  // ── Queries ────────────────────────────────────────────────────────────────
   const { data: activeData } = trpc.number.getActive.useQuery(undefined, {
     refetchInterval: 3000,
     staleTime: 0,
@@ -636,7 +642,6 @@ export default function NumbersPage() {
   const { data: settingsData } = trpc.service.settings.useQuery();
   const minCancelMs = (settingsData?.minCancelMinutes ?? 2) * 60 * 1000;
 
-  // ── Mutations ──────────────────────────────────────────────────────────────
   const cancelMutation = trpc.number.cancel.useMutation({
     onSuccess: (data) => {
       setCancellingId(null);
@@ -675,30 +680,25 @@ export default function NumbersPage() {
     },
   });
 
-  // ── Invalidate received/cancelled when numbers disappear from active ───────
   const prevActiveIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const currentIds = new Set(activeData?.numbers.map((n) => n.id) ?? []);
     const prevIds = prevActiveIdsRef.current;
-
     const removed = [...prevIds].filter((id) => !currentIds.has(id));
     if (removed.length > 0) {
       utils.number.getReceivedInfinite.invalidate();
       utils.number.getCancelledInfinite.invalidate();
       utils.wallet.balance.invalidate();
     }
-
     prevActiveIdsRef.current = currentIds;
   }, [activeData, utils]);
 
-  // ── Data transformation ────────────────────────────────────────────────────
   const numbers: TempNumber[] = useMemo(() => {
     return (
       activeData?.numbers.map((n) => {
         const server = n.service?.server;
         const { smsList, displaySms } = parseSmsContent(n.smsContent);
-
         return {
           id: n.id,
           orderId: n.orderId,
@@ -729,7 +729,6 @@ export default function NumbersPage() {
         .map((n: any) => {
           const server = n.service?.server;
           const { smsList, displaySms } = parseSmsContent(n.smsContent);
-
           return {
             id: n.id,
             orderId: n.orderId,
@@ -759,7 +758,6 @@ export default function NumbersPage() {
         .flatMap((p: any) => p.numbers)
         .map((n: any) => {
           const server = n.service?.server;
-
           return {
             id: n.id,
             orderId: n.orderId,
@@ -783,27 +781,21 @@ export default function NumbersPage() {
     );
   }, [cancelledData]);
 
-  // ── SMS arrival notification ───────────────────────────────────────────────
   useEffect(() => {
     if (!activeData) return;
-
     const smsCount = numbers.filter((n) => n.sms || n.smsList).length;
-
     if (!initializedRef.current) {
       prevSmsCountRef.current = smsCount;
       initializedRef.current = true;
       return;
     }
-
     if (smsCount > prevSmsCountRef.current) {
       toast.success("🎉 SMS received!");
       playNotificationSound();
     }
-
     prevSmsCountRef.current = smsCount;
   }, [numbers, activeData]);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCancel = useCallback(
     (orderId: string) => {
       setCancellingId(orderId);
@@ -830,7 +822,6 @@ export default function NumbersPage() {
     }
   };
 
-  // ── Derived state ──────────────────────────────────────────────────────────
   const counts = {
     waiting: numbers.length,
     received: receivedNumbers.length,
@@ -851,7 +842,6 @@ export default function NumbersPage() {
         ? hasMoreCancelled
         : false;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
