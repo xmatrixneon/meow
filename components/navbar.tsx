@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { Wallet, Loader2, Volume2, VolumeX, Plus } from "lucide-react";
@@ -44,15 +43,19 @@ export function Navbar({ className }: NavbarProps) {
 
   const avatarUrl = user?.photoUrl ?? user?.image ?? null;
 
-  const balanceColor =
-    walletBalance < 10
-      ? "bg-red-500/10 dark:bg-red-500/15 text-red-600 dark:text-red-400"
-      : "bg-green-500/10 dark:bg-green-500/15 text-green-600 dark:text-green-400";
+  const isLow = walletBalance < 10;
 
-  const plusColor =
-    walletBalance < 10
-      ? "bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400"
-      : "bg-green-500/15 hover:bg-green-500/25 text-green-600 dark:text-green-400";
+  const balanceColor = isLow
+    ? "bg-red-500/10 dark:bg-red-500/15 text-red-600 dark:text-red-400"
+    : "bg-green-500/10 dark:bg-green-500/15 text-green-600 dark:text-green-400";
+
+  const dividerColor = isLow
+    ? "bg-red-500/20 dark:bg-red-500/25"
+    : "bg-green-500/20 dark:bg-green-500/25";
+
+  const plusHoverColor = isLow
+    ? "hover:bg-red-500/20 dark:hover:bg-red-500/25"
+    : "hover:bg-green-500/20 dark:hover:bg-green-500/25";
 
   return (
     <motion.header
@@ -84,41 +87,47 @@ export function Navbar({ className }: NavbarProps) {
           </div>
         </div>
 
-        {/* Wallet Balance + Plus button */}
-        <div className="flex items-center gap-1">
-          <motion.div
-            whileTap={{ scale: 0.97 }}
+        {/* Wallet Balance pill with embedded Plus button */}
+        <motion.div
+          whileTap={{ scale: 0.97 }}
+          className={cn(
+            "flex items-center rounded-full overflow-hidden h-9 transition-colors duration-200",
+            balanceColor,
+          )}
+        >
+          {/* Balance section — clickable */}
+          <button
+            type="button"
             onClick={() => router.push("/wallet")}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer",
-              "transition-colors duration-200 h-9",
-              balanceColor,
-            )}
+            className="flex items-center gap-1.5 pl-3 pr-2.5 h-full"
           >
             {balanceLoading ? (
               <Loader2 size={14} strokeWidth={2} className="animate-spin" />
             ) : (
-              <Wallet size={15} strokeWidth={2} />
+              <Wallet size={14} strokeWidth={2} />
             )}
             <span className="font-semibold text-xs whitespace-nowrap">
               ₹{walletBalance.toFixed(2)}
             </span>
-          </motion.div>
+          </button>
 
-          {/* Plus / Add balance button */}
+          {/* Divider */}
+          <div className={cn("w-px h-4 shrink-0", dividerColor)} />
+
+          {/* Plus button section */}
           <motion.button
-            whileTap={{ scale: 0.88 }}
+            whileTap={{ scale: 0.85 }}
             type="button"
             onClick={() => router.push("/wallet")}
             aria-label="Add balance"
             className={cn(
-              "flex items-center justify-center w-7 h-7 rounded-full transition-colors duration-200",
-              plusColor,
+              "flex items-center justify-center pl-2 pr-2.5 h-full transition-colors duration-200 rounded-r-full",
+              plusHoverColor,
             )}
           >
-            <Plus size={14} strokeWidth={2.5} />
+            <Plus size={13} strokeWidth={2.8} />
           </motion.button>
-        </div>
+        </motion.div>
 
         {/* Sound toggle */}
         <motion.button
