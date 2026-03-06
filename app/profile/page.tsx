@@ -24,6 +24,7 @@ import {
   Key,
   Clock,
   BookOpen,
+  MessageCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -516,6 +517,22 @@ export default function ProfilePage() {
               label="Help & FAQ"
               onClick={() => setSupportOpen(true)}
             />
+            {settings?.telegramSupportUsername && (
+              <a
+                href={`https://t.me/${settings.telegramSupportUsername}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full block"
+              >
+                <SettingsRow
+                  icon={MessageCircle}
+                  iconColor="text-blue-500"
+                  label="Telegram Support"
+                  onClick={() => {}}
+                  trailing={<ExternalLink size={13} className="text-muted-foreground/50 shrink-0" />}
+                />
+              </a>
+            )}
             <SettingsRow
               icon={FileText}
               label="Terms & Privacy"
@@ -537,6 +554,7 @@ export default function ProfilePage() {
         open={apiDocsOpen}
         onOpenChange={setApiDocsOpen}
         apiKey={apiKeyData?.apiKey ?? ""}
+        baseUrl={settings?.apiDocsBaseUrl ?? undefined}
       />
 
       {/* Support Dialog */}

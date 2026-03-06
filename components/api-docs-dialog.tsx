@@ -16,6 +16,7 @@ interface ApiDocsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   apiKey: string;
+  baseUrl?: string;
 }
 
 const errorCodes = [
@@ -34,7 +35,7 @@ const errorCodes = [
   { code: "BAD_STATUS", description: "Invalid status code" },
 ];
 
-export function ApiDocsDialog({ open, onOpenChange, apiKey }: ApiDocsDialogProps) {
+export function ApiDocsDialog({ open, onOpenChange, apiKey, baseUrl }: ApiDocsDialogProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopyKey = () => {
@@ -44,7 +45,7 @@ export function ApiDocsDialog({ open, onOpenChange, apiKey }: ApiDocsDialogProps
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yourdomain.com";
+  const resolvedBaseUrl = baseUrl ?? (typeof window !== "undefined" ? window.location.origin : "https://yourdomain.com");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,7 +84,7 @@ export function ApiDocsDialog({ open, onOpenChange, apiKey }: ApiDocsDialogProps
                 <Code size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                 {/* break-all for long URLs */}
                 <code className="text-xs font-mono text-muted-foreground break-all">
-                  {baseUrl}/api/stubs/handler_api.php
+                  {resolvedBaseUrl}/stubs/handler_api.php
                 </code>
               </div>
             </div>
