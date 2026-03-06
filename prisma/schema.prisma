@@ -304,9 +304,11 @@ model Settings {
   minRedeem           Decimal @default(0) @db.Decimal(10, 2)
   numberExpiryMinutes Int     @default(20)
   currency            String  @default("INR")
-  minCancelMinutes    Int     @default(2)
-  maintenanceMode     Boolean @default(false)
-  telegramHelpUrl     String?  // URL to Telegram support chat
+  minCancelMinutes         Int     @default(2)
+  maintenanceMode          Boolean @default(false)
+  telegramHelpUrl          String?  // URL to Telegram support chat
+  telegramSupportUsername  String?  // Telegram bot username for support
+  apiDocsBaseUrl           String?  // API docs base URL
 }
 
 // ============================================
