@@ -52,45 +52,28 @@ const statusConfig = {
 } as const;
 
 const getTransactionIcon = (type: string, status: string) => {
-  // Show status-based icons
   if (status === "FAILED") return <XCircle size={16} />;
   if (status === "PENDING") return <AlertCircle size={16} />;
-
-  // Show action-based icons for completed transactions
   switch (type) {
-    case "PURCHASE":
-      return <ShoppingBag size={16} />; // Purchased
-    case "DEPOSIT":
-      return <Wallet size={16} />; // Deposited
-    case "REFUND":
-      return <XCircle size={16} />; // Cancelled/Refunded
-    case "PROMO":
-      return <Gift size={16} />; // Promo
-    case "REFERRAL":
-      return <Sparkles size={16} />; // Bonus
-    case "ADJUSTMENT":
-      return <Settings size={16} />; // Adjustment
-    default:
-      return <Clock size={16} />;
+    case "PURCHASE":   return <ShoppingBag size={16} />;
+    case "DEPOSIT":    return <Wallet size={16} />;
+    case "REFUND":     return <XCircle size={16} />;
+    case "PROMO":      return <Gift size={16} />;
+    case "REFERRAL":   return <Sparkles size={16} />;
+    case "ADJUSTMENT": return <Settings size={16} />;
+    default:           return <Clock size={16} />;
   }
 };
 
 const getTransactionColor = (type: string) => {
   switch (type) {
-    case "DEPOSIT":
-      return { color: "text-green-500", bg: "bg-green-500/10" };
-    case "PURCHASE":
-      return { color: "text-amber-500", bg: "bg-amber-500/10" };
-    case "REFUND":
-      return { color: "text-sky-500", bg: "bg-sky-500/10" };
-    case "PROMO":
-      return { color: "text-violet-500", bg: "bg-violet-500/10" };
-    case "REFERRAL":
-      return { color: "text-pink-500", bg: "bg-pink-500/10" };
-    case "ADJUSTMENT":
-      return { color: "text-orange-500", bg: "bg-orange-500/10" };
-    default:
-      return { color: "text-muted-foreground", bg: "bg-muted" };
+    case "DEPOSIT":    return { color: "text-green-500",           bg: "bg-green-500/10" };
+    case "PURCHASE":   return { color: "text-amber-500",           bg: "bg-amber-500/10" };
+    case "REFUND":     return { color: "text-sky-500",             bg: "bg-sky-500/10" };
+    case "PROMO":      return { color: "text-violet-500",          bg: "bg-violet-500/10" };
+    case "REFERRAL":   return { color: "text-pink-500",            bg: "bg-pink-500/10" };
+    case "ADJUSTMENT": return { color: "text-orange-500",          bg: "bg-orange-500/10" };
+    default:           return { color: "text-muted-foreground",    bg: "bg-muted" };
   }
 };
 
@@ -101,56 +84,47 @@ const getTransactionTitle = (tx: {
 }) => {
   const { type, description, metadata } = tx;
 
-  // For PURCHASE and REFUND, extract just the service name from description or metadata
   if (type === "PURCHASE") {
-    // First try to get serviceName from metadata
     if (metadata?.serviceName) return metadata.serviceName;
-    // Otherwise extract from description (e.g., "BigBasket number purchased" → "BigBasket")
     if (description) {
-      const serviceMatch = description.match(/^([A-Za-z]+)(?:\s+number)?/);
-      return serviceMatch ? serviceMatch[1] : description;
+      const m = description.match(/^([A-Za-z]+)(?:\s+number)?/);
+      return m ? m[1] : description;
     }
     return "Purchase";
   }
 
   if (type === "REFUND") {
-    // First try to get serviceName from metadata
     if (metadata?.serviceName) return metadata.serviceName;
-    // Otherwise extract from description
     if (description) {
-      const serviceMatch = description.match(/^([A-Za-z]+)/);
-      return serviceMatch ? serviceMatch[1] : description;
+      const m = description.match(/^([A-Za-z]+)/);
+      return m ? m[1] : description;
     }
     return "Refund";
   }
 
-  // For other types, use description if available
   if (description) return description;
 
   switch (type) {
-    case "DEPOSIT":
-      return "Deposit";
-    case "PROMO":
-      return "Promo";
-    case "REFERRAL":
-      return "Bonus";
-    case "ADJUSTMENT":
-      return "Adjustment";
-    default:
-      return "Transaction";
+    case "DEPOSIT":    return "Deposit";
+    case "PROMO":      return "Promo";
+    case "REFERRAL":   return "Bonus";
+    case "ADJUSTMENT": return "Adjustment";
+    default:           return "Transaction";
   }
 };
 
+// ✅ description added to both the type and the destructure
 const getTransactionSubtitle = (tx: {
   type: string;
+  description: string | null; // ← added
   metadata: any;
   createdAt: string;
   status: string;
   phoneNumber: string | null;
 }) => {
-  const { type, metadata, createdAt, status, phoneNumber } = tx;
+  const { type, description, metadata, createdAt, status, phoneNumber } = tx; // ← added
   if (status === "PENDING") return "Pending";
-  if (status === "FAILED") return "Failed";
+  if (status === "FAILED")  return "Failed";
   switch (type) {
     case "PURCHASE":
       return phoneNumber || "Number";
@@ -159,7 +133,7 @@ const getTransactionSubtitle = (tx: {
     case "REFUND":
       return phoneNumber || metadata?.serviceName || "Refunded";
     case "PROMO":
-      return metadata?.promocodeCode || "Code";
+      return metadata?.promocodeCode || metadata?.code || description || "Promo Code";
     case "REFERRAL":
       return "Referral";
     case "ADJUSTMENT":
@@ -233,8 +207,6 @@ export default function TransactionsPage() {
   const total = data?.total || 0;
   const hasMore = txOffset + 50 < total;
 
-  // Filter transactions based on selected type
-  // Get set of refunded orderIds to exclude cancelled purchases from "Numbers" filter
   const refundedOrderIds = useMemo(() => {
     const refunds = allTransactions.filter((tx) => tx.type === "REFUND");
     return new Set(refunds.map((tx) => (tx.metadata as any)?.orderId));
@@ -245,26 +217,21 @@ export default function TransactionsPage() {
       ? allTransactions
       : allTransactions.filter((tx) => {
           if (filter === "numbers") {
-            // Only show PURCHASE transactions that haven't been refunded
             return (
               tx.type === "PURCHASE" &&
               !refundedOrderIds.has((tx.metadata as any)?.orderId)
             );
           }
-          if (filter === "refunds") return tx.type === "REFUND";
-          if (filter === "deposits") return tx.type === "DEPOSIT";
+          if (filter === "refunds")  return tx.type === "REFUND";
+          if (filter === "deposits") return tx.type === "DEPOSIT" || tx.type === "PROMO";
           return true;
         });
 
   const filteredTotal = filter === "all" ? total : filteredTransactions.length;
 
-  // ── same pattern as profile / wallet ──
-  const balance = Number(walletData?.balance ?? 0);
-  const totalSpent = Number(walletData?.totalSpent ?? 0);
+  const balance       = Number(walletData?.balance      ?? 0);
+  const totalSpent    = Number(walletData?.totalSpent    ?? 0);
   const totalRecharge = Number(walletData?.totalRecharge ?? 0);
-
-  // Use backend statistics for accurate counts
-  const numberCount = data?.statistics?.numberCountWithSms ?? 0;
 
   if (isPending && !user) return <TransactionsSkeleton />;
 
@@ -298,62 +265,48 @@ export default function TransactionsPage() {
           className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-5"
         >
           <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
-
           <div className="relative">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 mb-4">
               Wallet Overview
             </p>
-
-            {/* Stats — identical to profile & wallet */}
             <div className="grid grid-cols-3 gap-2">
               <div className="flex flex-col items-center gap-1.5">
                 <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
                   <TrendingDown size={15} className="text-rose-500" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                  Spent
-                </p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">Spent</p>
                 <p className="text-sm font-bold text-rose-500 tabular-nums flex items-center gap-0">
                   <IndianRupee size={11} strokeWidth={2.5} />
                   {totalSpent.toFixed(2)}
                 </p>
               </div>
-
               <div className="flex flex-col items-center gap-1.5">
                 <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <Wallet size={15} className="text-primary" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                  Balance
-                </p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">Balance</p>
                 <p className="text-sm font-bold text-primary tabular-nums flex items-center gap-0">
                   <IndianRupee size={11} strokeWidth={2.5} />
                   {balance.toFixed(2)}
                 </p>
               </div>
-
               <div className="flex flex-col items-center gap-1.5">
                 <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
                   <TrendingUp size={15} className="text-green-500" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                  Recharge
-                </p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">Recharge</p>
                 <p className="text-sm font-bold text-green-500 tabular-nums flex items-center gap-0">
                   <IndianRupee size={11} strokeWidth={2.5} />
                   {totalRecharge.toFixed(2)}
                 </p>
               </div>
             </div>
-            {/* Transaction stats */}
             <div className="mt-4 pt-4 border-t border-primary/15 grid grid-cols-2 gap-2">
               <div className="flex flex-col items-center gap-1.5">
                 <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
                   <CreditCard size={15} className="text-amber-500" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                  Numbers bought
-                </p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">Numbers bought</p>
                 <p className="text-sm font-bold text-amber-500 tabular-nums">
                   {data?.statistics?.numberCountWithSms ?? 0}
                 </p>
@@ -362,9 +315,7 @@ export default function TransactionsPage() {
                 <div className="w-9 h-9 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
                   <Zap size={15} className="text-sky-500" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                  Refunds
-                </p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">Refunds</p>
                 <p className="text-sm font-bold text-sky-500 tabular-nums">
                   {allTransactions.filter((t) => t.type === "REFUND").length}
                 </p>
@@ -374,10 +325,7 @@ export default function TransactionsPage() {
         </motion.div>
 
         {/* ── Filter pills ── */}
-        <motion.div
-          {...fadeUp(0.06)}
-          className="flex gap-2 overflow-x-auto pb-0.5"
-        >
+        <motion.div {...fadeUp(0.06)} className="flex gap-2 overflow-x-auto pb-0.5">
           {filters.map((f) => (
             <button
               key={f.value}
@@ -409,10 +357,8 @@ export default function TransactionsPage() {
                             !refundedOrderIds.has((t.metadata as any)?.orderId),
                         ).length
                       : f.value === "refunds"
-                        ? allTransactions.filter((t) => t.type === "REFUND")
-                            .length
-                        : allTransactions.filter((t) => t.type === "DEPOSIT")
-                            .length}
+                        ? allTransactions.filter((t) => t.type === "REFUND").length
+                        : allTransactions.filter((t) => t.type === "DEPOSIT" || t.type === "PROMO").length}
               </span>
             </button>
           ))}
@@ -426,35 +372,20 @@ export default function TransactionsPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{
-                type: "spring" as const,
-                stiffness: 280,
-                damping: 24,
-              }}
+              transition={{ type: "spring" as const, stiffness: 280, damping: 24 }}
               className="flex flex-col items-center justify-center py-16 gap-3"
             >
               <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-                {filter === "numbers" && (
-                  <CreditCard size={22} className="text-muted-foreground" />
-                )}
-                {filter === "refunds" && (
-                  <Zap size={22} className="text-muted-foreground" />
-                )}
-                {filter === "deposits" && (
-                  <Wallet size={22} className="text-muted-foreground" />
-                )}
-                {filter === "all" && (
-                  <Hash size={22} className="text-muted-foreground" />
-                )}
+                {filter === "numbers"  && <CreditCard size={22} className="text-muted-foreground" />}
+                {filter === "refunds"  && <Zap        size={22} className="text-muted-foreground" />}
+                {filter === "deposits" && <Wallet     size={22} className="text-muted-foreground" />}
+                {filter === "all"      && <Hash       size={22} className="text-muted-foreground" />}
               </div>
               <p className="text-sm text-muted-foreground">
-                {filter === "all"
-                  ? "No transactions found"
-                  : filter === "numbers"
-                    ? "No numbers purchased yet"
-                    : filter === "refunds"
-                      ? "No refunds yet"
-                      : "No deposits yet"}
+                {filter === "all"      ? "No transactions found"
+                : filter === "numbers" ? "No numbers purchased yet"
+                : filter === "refunds" ? "No refunds yet"
+                :                        "No deposits yet"}
               </p>
             </motion.div>
           ) : (
@@ -464,14 +395,8 @@ export default function TransactionsPage() {
             >
               {filteredTransactions.map((tx, i) => {
                 const colorConfig = getTransactionColor(tx.type);
-                const isCredit = [
-                  "DEPOSIT",
-                  "PROMO",
-                  "REFERRAL",
-                  "REFUND",
-                  "ADJUSTMENT",
-                ].includes(tx.type);
-                const title = getTransactionTitle(tx);
+                const isCredit = ["DEPOSIT", "PROMO", "REFERRAL", "REFUND", "ADJUSTMENT"].includes(tx.type);
+                const title    = getTransactionTitle(tx);
                 const subtitle = getTransactionSubtitle(tx);
 
                 return (
@@ -479,73 +404,45 @@ export default function TransactionsPage() {
                     key={tx.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      type: "spring" as const,
-                      stiffness: 280,
-                      damping: 24,
-                      delay: i * 0.04,
-                    }}
+                    transition={{ type: "spring" as const, stiffness: 280, damping: 24, delay: i * 0.04 }}
                     className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-muted/40 transition-colors duration-150"
                   >
-                    <div
-                      className={cn(
-                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
-                        colorConfig.bg,
-                      )}
-                    >
+                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", colorConfig.bg)}>
                       <div className={colorConfig.color}>
                         {getTransactionIcon(tx.type, tx.status)}
                       </div>
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-foreground truncate">
-                        {title}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {subtitle}
-                      </p>
+                      <p className="font-semibold text-sm text-foreground truncate">{title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
 
-                      {/* PURCHASE: Show SMS status */}
-                      {tx.type === "PURCHASE" && (
-                        <>
-                          {(tx.metadata as any)?.smsReceived && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <MessageSquare
-                                size={9}
-                                className="text-green-500"
-                              />
-                              <span className="text-[10px] text-green-500">
-                                SMS
-                              </span>
-                            </div>
-                          )}
-                        </>
+                      {tx.type === "PURCHASE" && (tx.metadata as any)?.smsReceived && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <MessageSquare size={9} className="text-green-500" />
+                          <span className="text-[10px] text-green-500">SMS</span>
+                        </div>
                       )}
 
-                      {/* REFUND: Show service name */}
-                      {tx.type === "REFUND" && (
-                        <>
-                          {(tx.metadata as any)?.serviceName && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Zap size={9} className="text-sky-500" />
-                              <span className="text-[10px] text-sky-500">
-                                {(tx.metadata as any)?.serviceName}
-                              </span>
-                            </div>
-                          )}
-                        </>
+                      {tx.type === "REFUND" && (tx.metadata as any)?.serviceName && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Zap size={9} className="text-sky-500" />
+                          <span className="text-[10px] text-sky-500">{(tx.metadata as any)?.serviceName}</span>
+                        </div>
                       )}
 
-                      {/* DEPOSIT: Show transaction date */}
-                      {tx.type === "DEPOSIT" &&
-                        (tx.metadata as any)?.transactionDate && (
-                          <span className="text-[10px] text-muted-foreground/70">
-                            {new Date(
-                              (tx.metadata as any)?.transactionDate,
-                            ).toLocaleDateString()}
-                          </span>
-                        )}
+                      {tx.type === "PROMO" && (tx.metadata as any)?.promocodeCode && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Gift size={9} className="text-violet-500" />
+                          <span className="text-[10px] text-violet-500">{(tx.metadata as any)?.promocodeCode}</span>
+                        </div>
+                      )}
+
+                      {tx.type === "DEPOSIT" && (tx.metadata as any)?.transactionDate && (
+                        <span className="text-[10px] text-muted-foreground/70">
+                          {new Date((tx.metadata as any)?.transactionDate).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-right shrink-0">
@@ -564,9 +461,7 @@ export default function TransactionsPage() {
                         {Math.abs(tx.amount || 0).toFixed(2)}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
-                        {formatDistanceToNow(new Date(tx.createdAt), {
-                          addSuffix: true,
-                        })}
+                        {formatDistanceToNow(new Date(tx.createdAt), { addSuffix: true })}
                       </p>
                     </div>
                   </motion.div>
@@ -585,9 +480,7 @@ export default function TransactionsPage() {
             >
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">
-                    Showing
-                  </p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Showing</p>
                   <p className="text-sm font-bold text-foreground">
                     {filteredTransactions.length} of {filteredTotal}{" "}
                     {filter === "all" ? "total" : filter}
@@ -595,9 +488,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground mb-0.5">Filter</p>
-                  <p className="text-sm font-bold text-primary capitalize">
-                    {filter}
-                  </p>
+                  <p className="text-sm font-bold text-primary capitalize">{filter}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/60">
@@ -618,12 +509,8 @@ export default function TransactionsPage() {
               </div>
             </motion.div>
 
-            {/* Only show load more for "all" filter since we fetch 50 at once */}
             {filter === "all" && hasMore && (
-              <motion.div
-                {...fadeUp(0.28)}
-                className="flex justify-center py-4"
-              >
+              <motion.div {...fadeUp(0.28)} className="flex justify-center py-4">
                 <button
                   onClick={() => {
                     setLoadingMore(true);

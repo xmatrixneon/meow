@@ -545,7 +545,7 @@ export default function ProfilePage() {
           {...fadeUp(0.16)}
           className="text-center text-[10px] text-muted-foreground/40 pb-2"
         >
-          MeowSMS v1.0.0 · Built with 🐾
+          MeowSMS v1.0.0 · Built with 🇷🇺
         </motion.p>
       </div>
 
