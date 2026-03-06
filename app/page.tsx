@@ -386,7 +386,7 @@ export default function MiniAppPage() {
     servicesData?.services.map((s) => ({
       id: s.id,
       name: s.name,
-      emoji: String(s.basePrice ?? ""), // reuse emoji field to carry price for display
+      emoji: String(s.basePrice ?? ""),
       category: "Service",
     })) || [];
 
@@ -479,6 +479,13 @@ export default function MiniAppPage() {
     );
   }
 
+  // Each recent number row is ~52px tall + 8px gap; show 3 rows = ~164px
+  const RECENT_ROW_H = 52;
+  const RECENT_GAP = 8;
+  const RECENT_VISIBLE = 3;
+  const recentScrollHeight =
+    RECENT_VISIBLE * RECENT_ROW_H + (RECENT_VISIBLE - 1) * RECENT_GAP + 20; // +20 for padding
+
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
@@ -508,7 +515,6 @@ export default function MiniAppPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">Welcome back</p>
-
               <h1 className="text-lg font-bold text-foreground truncate">
                 {displayName}
               </h1>
@@ -556,7 +562,6 @@ export default function MiniAppPage() {
               : "Choose a service"}
           </p>
 
-          {/* ── Scrollable services box ── */}
           <ScrollArea className="h-[272px] w-full rounded-2xl border border-border">
             <div className="p-2.5">
               <AnimatePresence mode="popLayout">
@@ -587,7 +592,6 @@ export default function MiniAppPage() {
                 )}
               </AnimatePresence>
 
-              {/* Load More */}
               {servicesData?.hasMore && (
                 <div className="flex justify-center pt-4 pb-1">
                   <Button
@@ -623,17 +627,19 @@ export default function MiniAppPage() {
             </button>
           </div>
 
-          {/* Scrollable box same as services */}
-          <ScrollArea className="h-[272px] w-full rounded-2xl border border-border">
-            <div className="p-2.5">
+          {/* Fixed-height scroll area showing ~3 rows */}
+          <ScrollArea
+            className="w-full rounded-xl border border-border"
+            style={{ height: recentScrollHeight }}
+          >
+            <div className="p-2">
               {recentNumbersData?.numbers &&
               recentNumbersData.numbers.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {recentNumbersData.numbers.slice(0, 1).map((num) => {
+                <div className="flex flex-col gap-2">
+                  {recentNumbersData.numbers.map((num) => {
                     const server = num.service?.server;
                     const isCompleted = num.status === "COMPLETED";
                     const isCancelled = num.status === "CANCELLED";
-
                     const statusLabel = isCompleted
                       ? "Received"
                       : isCancelled
@@ -643,8 +649,8 @@ export default function MiniAppPage() {
                     return (
                       <div
                         key={num.id}
-                        className="flex items-center gap-2.5 px-3 py-2.5 w-full bg-card border border-border rounded-2xl hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 cursor-pointer"
                         onClick={() => router.push("/numbers")}
+                        className="flex items-center gap-2.5 px-3 py-2.5 bg-card border border-border rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 cursor-pointer"
                       >
                         {/* Flag */}
                         <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
@@ -662,48 +668,41 @@ export default function MiniAppPage() {
                               {getCountryFlagEmoji(server.countryIso)}
                             </span>
                           ) : (
-                            <Globe
-                              size={14}
-                              className="text-muted-foreground"
-                            />
+                            <Globe size={14} className="text-muted-foreground" />
                           )}
                         </div>
 
-                        {/* Number + service */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold font-mono truncate">
-                            {num.phoneNumber}
-                          </p>
+                        {/* Phone number */}
+                        <p className="text-xs font-semibold font-mono truncate flex-1 min-w-0">
+                          {num.phoneNumber}
+                        </p>
 
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {num.service?.name || "Unknown"}
-                            </p>
+                        {/* Service name */}
+                        <p className="text-[11px] text-muted-foreground truncate shrink-0 max-w-[64px]">
+                          {num.service?.name || "Unknown"}
+                        </p>
 
-                            <span
-                              className={cn(
-                                "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
-                                isCompleted
-                                  ? "bg-green-500/10 border-green-500/30 text-green-500"
-                                  : isCancelled
-                                    ? "bg-red-500/10 border-red-500/30 text-red-500"
-                                    : "bg-amber-400/10 border-amber-400/30 text-amber-500",
-                              )}
-                            >
-                              {statusLabel}
-                            </span>
-                          </div>
-                        </div>
+                        {/* Status badge */}
+                        <span
+                          className={cn(
+                            "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0",
+                            isCompleted
+                              ? "bg-green-500/10 border-green-500/30 text-green-500"
+                              : isCancelled
+                                ? "bg-red-500/10 border-red-500/30 text-red-500"
+                                : "bg-amber-400/10 border-amber-400/30 text-amber-500",
+                          )}
+                        >
+                          {statusLabel}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="flex flex-col items-center py-10 gap-2">
+                <div className="flex flex-col items-center py-8 gap-2">
                   <Hash size={28} className="text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">
-                    No numbers yet
-                  </p>
+                  <p className="text-sm text-muted-foreground">No numbers yet</p>
                   <p className="text-xs text-muted-foreground/60">
                     Pick a service above to get started
                   </p>
