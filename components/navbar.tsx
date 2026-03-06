@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Wallet, Loader2, Volume2, VolumeX } from "lucide-react";
+import { Wallet, Loader2, Volume2, VolumeX, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
@@ -44,6 +44,16 @@ export function Navbar({ className }: NavbarProps) {
 
   const avatarUrl = user?.photoUrl ?? user?.image ?? null;
 
+  const balanceColor =
+    walletBalance < 10
+      ? "bg-red-500/10 dark:bg-red-500/15 text-red-600 dark:text-red-400"
+      : "bg-green-500/10 dark:bg-green-500/15 text-green-600 dark:text-green-400";
+
+  const plusColor =
+    walletBalance < 10
+      ? "bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400"
+      : "bg-green-500/15 hover:bg-green-500/25 text-green-600 dark:text-green-400";
+
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -74,36 +84,48 @@ export function Navbar({ className }: NavbarProps) {
           </div>
         </div>
 
-        {/* Wallet Balance */}
-        <motion.div
-          whileTap={{ scale: 0.97 }}
-          onClick={() => router.push("/wallet")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer",
-            "transition-colors duration-200 h-9",
-            walletBalance < 10
-              ? "bg-red-500/10 dark:bg-red-500/15 text-red-600 dark:text-red-400"
-              : "bg-green-500/10 dark:bg-green-500/15 text-green-600 dark:text-green-400",
-          )}
-        >
-          {balanceLoading ? (
-            <Loader2 size={14} strokeWidth={2} className="animate-spin" />
-          ) : (
-            <Wallet size={15} strokeWidth={2} />
-          )}
-          <span className="font-semibold text-xs whitespace-nowrap">
-            ₹{walletBalance.toFixed(2)}
-          </span>
-        </motion.div>
+        {/* Wallet Balance + Plus button */}
+        <div className="flex items-center gap-1">
+          <motion.div
+            whileTap={{ scale: 0.97 }}
+            onClick={() => router.push("/wallet")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer",
+              "transition-colors duration-200 h-9",
+              balanceColor,
+            )}
+          >
+            {balanceLoading ? (
+              <Loader2 size={14} strokeWidth={2} className="animate-spin" />
+            ) : (
+              <Wallet size={15} strokeWidth={2} />
+            )}
+            <span className="font-semibold text-xs whitespace-nowrap">
+              ₹{walletBalance.toFixed(2)}
+            </span>
+          </motion.div>
+
+          {/* Plus / Add balance button */}
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            type="button"
+            onClick={() => router.push("/wallet")}
+            aria-label="Add balance"
+            className={cn(
+              "flex items-center justify-center w-7 h-7 rounded-full transition-colors duration-200",
+              plusColor,
+            )}
+          >
+            <Plus size={14} strokeWidth={2.5} />
+          </motion.button>
+        </div>
 
         {/* Sound toggle */}
         <motion.button
           whileTap={{ scale: 0.92 }}
           type="button"
           onClick={toggle}
-          aria-label={
-            enabled ? "Mute SMS notifications" : "Unmute SMS notifications"
-          }
+          aria-label={enabled ? "Mute SMS notifications" : "Unmute SMS notifications"}
           className={cn(
             "relative flex items-center justify-center w-9 h-9 rounded-full transition-colors duration-200",
             enabled
@@ -117,11 +139,7 @@ export function Navbar({ className }: NavbarProps) {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 20 }}
           >
-            {enabled ? (
-              <Volume2 size={17} strokeWidth={2} />
-            ) : (
-              <VolumeX size={17} strokeWidth={2} />
-            )}
+            {enabled ? <Volume2 size={17} strokeWidth={2} /> : <VolumeX size={17} strokeWidth={2} />}
           </motion.div>
         </motion.button>
 
@@ -145,11 +163,7 @@ export function Navbar({ className }: NavbarProps) {
               )}
             >
               {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                />
+                <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
               ) : (
                 initials
               )}

@@ -137,7 +137,12 @@ function ServiceCard({
     <motion.button
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring" as const, stiffness: 300, damping: 24, delay }}
+      transition={{
+        type: "spring" as const,
+        stiffness: 300,
+        damping: 24,
+        delay,
+      }}
       whileTap={{ scale: 0.97 }}
       type="button"
       onClick={onClick}
@@ -145,16 +150,12 @@ function ServiceCard({
         "flex items-center gap-2.5 px-3 py-2.5 w-full",
         "bg-card border border-border rounded-2xl",
         "hover:border-primary/40 hover:bg-primary/5",
-        "transition-all duration-200 group text-left"
+        "transition-all duration-200 group text-left",
       )}
     >
       {/* Icon */}
       <div className="w-8 h-8 rounded-xl bg-primary/10 dark:bg-primary/15 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors duration-200">
-        <Phone
-          size={14}
-          strokeWidth={2.2}
-          className="text-primary"
-        />
+        <Phone size={14} strokeWidth={2.2} className="text-primary" />
       </div>
 
       {/* Name */}
@@ -190,7 +191,7 @@ function ServerCard({
     ? server.services?.find(
         (s) =>
           s.name.toLowerCase() === selectedServiceName.toLowerCase() ||
-          s.code.toLowerCase() === selectedServiceName.toLowerCase()
+          s.code.toLowerCase() === selectedServiceName.toLowerCase(),
       )
     : server.services?.[0];
   const price = Number(selectedService?.basePrice ?? server.price ?? 0);
@@ -204,7 +205,7 @@ function ServerCard({
         "bg-card border rounded-2xl p-4",
         outOfStock
           ? "border-border opacity-60"
-          : "border-border hover:border-primary/30"
+          : "border-border hover:border-primary/30",
       )}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -212,7 +213,7 @@ function ServerCard({
           <div
             className={cn(
               "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden",
-              outOfStock ? "bg-muted" : "bg-primary/10 dark:bg-primary/15"
+              outOfStock ? "bg-muted" : "bg-primary/10 dark:bg-primary/15",
             )}
           >
             {server.flagUrl ? (
@@ -232,7 +233,9 @@ function ServerCard({
               <Server
                 size={16}
                 strokeWidth={2}
-                className={outOfStock ? "text-muted-foreground" : "text-primary"}
+                className={
+                  outOfStock ? "text-muted-foreground" : "text-primary"
+                }
               />
             )}
           </div>
@@ -273,8 +276,8 @@ function ServerCard({
                 outOfStock
                   ? "text-muted-foreground"
                   : lowStock
-                  ? "text-amber-500"
-                  : "text-foreground"
+                    ? "text-amber-500"
+                    : "text-foreground",
               )}
             >
               {server.stock}
@@ -324,16 +327,19 @@ export default function MiniAppPage() {
   const { data: servicesData, isLoading: isLoadingServices } =
     trpc.service.list.useQuery(
       { search: debouncedSearch, limit: 20, offset: serviceOffset },
-      { staleTime: 5 * 60 * 1000 }
+      { staleTime: 5 * 60 * 1000 },
     );
   const { data: serversData } = trpc.service.servers.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
   const { data: walletData } = trpc.wallet.balance.useQuery();
   const { data: settingsData } = trpc.service.settings.useQuery();
-  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(undefined, {
-    staleTime: 60 * 1000,
-  });
+  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(
+    undefined,
+    {
+      staleTime: 60 * 1000,
+    },
+  );
 
   const utils = trpc.useUtils();
 
@@ -355,11 +361,20 @@ export default function MiniAppPage() {
     },
     onError: (error) => {
       let errorMessage = error.message || "Failed to assign number";
-      if (errorMessage.includes("balance") || errorMessage.includes("INSUFFICIENT")) {
+      if (
+        errorMessage.includes("balance") ||
+        errorMessage.includes("INSUFFICIENT")
+      ) {
         errorMessage = "Insufficient balance. Add funds to continue.";
-      } else if (errorMessage.includes("service") || errorMessage.includes("AVAILABLE")) {
+      } else if (
+        errorMessage.includes("service") ||
+        errorMessage.includes("AVAILABLE")
+      ) {
         errorMessage = "Service temporarily unavailable. Try another server.";
-      } else if (errorMessage.includes("Network") || errorMessage.includes("connection")) {
+      } else if (
+        errorMessage.includes("Network") ||
+        errorMessage.includes("connection")
+      ) {
         errorMessage = "Connection error. Check your internet and try again.";
       }
       toast.error(errorMessage);
@@ -371,7 +386,7 @@ export default function MiniAppPage() {
     servicesData?.services.map((s) => ({
       id: s.id,
       name: s.name,
-      emoji: String(s.basePrice ?? ""),   // reuse emoji field to carry price for display
+      emoji: String(s.basePrice ?? ""), // reuse emoji field to carry price for display
       category: "Service",
     })) || [];
 
@@ -416,7 +431,7 @@ export default function MiniAppPage() {
     const service = server?.services?.find(
       (s: any) =>
         s.name.toLowerCase() === selected.name.toLowerCase() ||
-        s.code.toLowerCase() === selected.name.toLowerCase()
+        s.code.toLowerCase() === selected.name.toLowerCase(),
     );
 
     if (!service) {
@@ -467,7 +482,6 @@ export default function MiniAppPage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-
         {/* Hero greeting */}
         <motion.div
           {...fadeUp(0)}
@@ -494,7 +508,7 @@ export default function MiniAppPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">Welcome back</p>
-              
+
               <h1 className="text-lg font-bold text-foreground truncate">
                 {displayName}
               </h1>
@@ -507,7 +521,6 @@ export default function MiniAppPage() {
                   {Number(walletData?.balance ?? 0).toFixed(2)}
                 </span>
               </div>
-             
             </div>
           </div>
         </motion.div>
@@ -561,10 +574,7 @@ export default function MiniAppPage() {
                     </p>
                   </motion.div>
                 ) : (
-                  <motion.div
-                    key="grid"
-                    className="grid grid-cols-2 gap-2"
-                  >
+                  <motion.div key="grid" className="grid grid-cols-2 gap-2">
                     {services.map((service, i) => (
                       <ServiceCard
                         key={service.id}
@@ -612,82 +622,93 @@ export default function MiniAppPage() {
               View all <ChevronRight size={12} />
             </button>
           </div>
-          <ScrollArea className="h-[240px] w-full -mx-4 px-4">
-            <div className="flex flex-col items-center py-5 gap-2">
-              {recentNumbersData?.numbers && recentNumbersData.numbers.length > 0 ? (
-                <div className="w-full space-y-2">
-                  {recentNumbersData.numbers.slice(0, 3).map((num) => {
-                  const server = num.service?.server;
-                  const isCompleted = num.status === "COMPLETED";
-                  const isCancelled = num.status === "CANCELLED";
-                  const statusColor = isCompleted ? "text-green-500" : isCancelled ? "text-destructive" : "text-amber-500";
-                  const statusLabel = isCompleted ? "Received" : isCancelled ? "Cancelled" : "Waiting";
 
-                  return (
-                    <div
-                      key={num.id}
-                      className="flex items-center gap-3 px-3 py-2.5 bg-muted/30 rounded-xl border border-border hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => router.push("/numbers")}
-                    >
-                      {/* Country flag */}
-                      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-                        {server?.flagUrl ? (
-                          <Image
-                            src={server.flagUrl}
-                            alt={server.countryName || ""}
-                            width={36}
-                            height={36}
-                            className="w-full h-full object-cover"
-                            unoptimized
-                          />
-                        ) : server?.countryIso ? (
-                          <span className="text-sm">{getCountryFlagEmoji(server.countryIso)}</span>
-                        ) : (
-                          <Globe size={14} className="text-muted-foreground" />
-                        )}
-                      </div>
+          {/* Scrollable box same as services */}
+          <ScrollArea className="h-[272px] w-full rounded-2xl border border-border">
+            <div className="p-2.5">
+              {recentNumbersData?.numbers &&
+              recentNumbersData.numbers.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {recentNumbersData.numbers.slice(0, 1).map((num) => {
+                    const server = num.service?.server;
+                    const isCompleted = num.status === "COMPLETED";
+                    const isCancelled = num.status === "CANCELLED";
 
-                      {/* Number and service info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm font-mono tracking-tight truncate">
-                          {num.phoneNumber}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <p className="text-xs text-muted-foreground truncate">
-                            {num.service?.name || "Unknown"}
+                    const statusLabel = isCompleted
+                      ? "Received"
+                      : isCancelled
+                        ? "Cancelled"
+                        : "Waiting";
+
+                    return (
+                      <div
+                        key={num.id}
+                        className="flex items-center gap-2.5 px-3 py-2.5 w-full bg-card border border-border rounded-2xl hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 cursor-pointer"
+                        onClick={() => router.push("/numbers")}
+                      >
+                        {/* Flag */}
+                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                          {server?.flagUrl ? (
+                            <Image
+                              src={server.flagUrl}
+                              alt={server.countryName || ""}
+                              width={32}
+                              height={32}
+                              className="w-full h-full object-cover"
+                              unoptimized
+                            />
+                          ) : server?.countryIso ? (
+                            <span className="text-sm">
+                              {getCountryFlagEmoji(server.countryIso)}
+                            </span>
+                          ) : (
+                            <Globe
+                              size={14}
+                              className="text-muted-foreground"
+                            />
+                          )}
+                        </div>
+
+                        {/* Number + service */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold font-mono truncate">
+                            {num.phoneNumber}
                           </p>
-                          <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full border",
-                            isCompleted ? "bg-green-500/10 border-green-500/30 text-green-500" :
-                            isCancelled ? "bg-red-500/10 border-red-500/30 text-red-500" :
-                            "bg-amber-400/10 border-amber-400/30 text-amber-500"
-                          )}>
-                            {statusLabel}
-                          </span>
+
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {num.service?.name || "Unknown"}
+                            </p>
+
+                            <span
+                              className={cn(
+                                "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border",
+                                isCompleted
+                                  ? "bg-green-500/10 border-green-500/30 text-green-500"
+                                  : isCancelled
+                                    ? "bg-red-500/10 border-red-500/30 text-red-500"
+                                    : "bg-amber-400/10 border-amber-400/30 text-amber-500",
+                              )}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
                         </div>
                       </div>
-
-                      {/* Time ago */}
-                      <p className="text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(num.createdAt).getTime() > Date.now() - 3600000
-                          ? `${Math.floor((Date.now() - new Date(num.createdAt).getTime()) / 60000)}m ago`
-                          : `${Math.floor((Date.now() - new Date(num.createdAt).getTime()) / 3600000)}h ago`
-                        }
-                      </p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
                 </div>
               ) : (
-              <>
-                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                  <Hash size={18} className="text-muted-foreground" />
+                <div className="flex flex-col items-center py-10 gap-2">
+                  <Hash size={28} className="text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">
+                    No numbers yet
+                  </p>
+                  <p className="text-xs text-muted-foreground/60">
+                    Pick a service above to get started
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground">No numbers yet</p>
-                <p className="text-xs text-muted-foreground/60">
-                  Pick a service above to get started
-                </p>
-              </>
-            )}
+              )}
             </div>
           </ScrollArea>
         </motion.div>
