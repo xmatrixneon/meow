@@ -1,85 +1,85 @@
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { prisma } from "@/lib/db";
+import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 
-// Configuration constants
+// ─── Configuration ────────────────────────────────────────────────────────────
+
 const COOLDOWN_MINUTES = 30;  // Must wait 30 min between refreshes
-const DAILY_LIMIT = 3;         // Max 3 refreshes per day
-const WEEKLY_LIMIT = 10;       // Max 10 refreshes per week
+const DAILY_LIMIT = 3;        // Max 3 refreshes per day
+const WEEKLY_LIMIT = 10;      // Max 10 refreshes per week
 
-/**
- * Helper function to get start of day in local timezone
- */
-function getStartOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Start of today in UTC (consistent across server restarts) */
+function startOfTodayUTC(): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
   return d;
 }
 
-/**
- * Helper function to get start of week in local timezone (Monday)
- */
-function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust so Monday is day 1
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
+/** Start of current week (Monday) in UTC */
+function startOfThisWeekUTC(): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  const day = d.getUTCDay(); // 0=Sun, 1=Mon...
+  const diff = day === 0 ? -6 : 1 - day; // roll back to Monday
+  d.setUTCDate(d.getUTCDate() + diff);
   return d;
 }
+
+// ─── Router ───────────────────────────────────────────────────────────────────
 
 export const apiKeyRouter = createTRPCRouter({
   /**
-   * Get or create user's API key
-   * Automatically creates a new API key if none exists
-   * Returns refresh limits information
+   * Get or create the user's API key.
+   * Returns key info + all rate limit details so the UI can display them.
+   *
+   * FIX: weekly/daily counts are now derived from real refresh timestamps
+   * stored in UserApiRefreshLog, not a single counter that never resets.
    */
   get: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
 
-    // Try to find existing API key
-    let userApi = await prisma.userApi.findUnique({
-      where: { userId },
-    });
+    let userApi = await prisma.userApi.findUnique({ where: { userId } });
 
-    // Create new API key if none exists
     if (!userApi) {
-      const apiKey = nanoid(32);
       userApi = await prisma.userApi.create({
-        data: {
-          userId,
-          apiKey,
-          isActive: true,
-          rateLimit: 100,
-        },
+        data: { userId, apiKey: nanoid(32), isActive: true, rateLimit: 100 },
       });
     }
 
     const now = new Date();
-    const lastRefreshed = userApi.lastRefreshedAt || userApi.createdAt;
+    const lastRefreshed = userApi.lastRefreshedAt ?? userApi.createdAt;
 
-    // Calculate remaining limits
-    const canRefresh = now.getTime() - lastRefreshed.getTime() >= COOLDOWN_MINUTES * 60 * 1000;
+    // FIX (Bug 7 + 8): count from real log records — resets automatically
+    const [dailyCount, weeklyCount] = await Promise.all([
+      prisma.userApiRefreshLog.count({
+        where: { userId, createdAt: { gte: startOfTodayUTC() } },
+      }),
+      prisma.userApiRefreshLog.count({
+        where: { userId, createdAt: { gte: startOfThisWeekUTC() } },
+      }),
+    ]);
 
-    // Calculate daily refreshes (this only works with full audit log, for now use refreshCount as proxy)
-    // For simplicity, we'll just check against weekly limit
-    const weeklyRemaining = Math.max(0, WEEKLY_LIMIT - userApi.refreshCount);
+    const msSinceLast = now.getTime() - lastRefreshed.getTime();
+    const cooldownMs = COOLDOWN_MINUTES * 60 * 1000;
+    const canRefresh =
+      msSinceLast >= cooldownMs &&
+      dailyCount < DAILY_LIMIT &&
+      weeklyCount < WEEKLY_LIMIT;
 
-    // Calculate cooldown remaining
-    const cooldownRemaining = Math.max(
-      0,
-      COOLDOWN_MINUTES - (now.getTime() - lastRefreshed.getTime()) / (60 * 1000)
-    );
+    const cooldownRemaining = Math.max(0, Math.ceil((cooldownMs - msSinceLast) / 60_000));
 
     return {
       apiKey: userApi.apiKey,
       isActive: userApi.isActive,
       createdAt: userApi.createdAt.toISOString(),
-      lastRefreshedAt: userApi.lastRefreshedAt?.toISOString() || null,
-      refreshCount: userApi.refreshCount,
+      lastRefreshedAt: userApi.lastRefreshedAt?.toISOString() ?? null,
       canRefresh,
-      cooldownRemaining: Math.ceil(cooldownRemaining),
-      weeklyRemaining,
+      cooldownRemaining,           // minutes remaining in cooldown
+      dailyRemaining: Math.max(0, DAILY_LIMIT - dailyCount),
+      weeklyRemaining: Math.max(0, WEEKLY_LIMIT - weeklyCount),
       limits: {
         cooldownMinutes: COOLDOWN_MINUTES,
         dailyLimit: DAILY_LIMIT,
@@ -89,85 +89,100 @@ export const apiKeyRouter = createTRPCRouter({
   }),
 
   /**
-   * Refresh/regenerate user's API key
-   * Invalidates the old key and creates a new one
-   * Multiple rate limits to prevent abuse:
-   * - 30 minutes cooldown between refreshes
-   * - 3 refreshes per day
-   * - 10 refreshes per week
+   * Regenerate the user's API key.
+   * Enforces: 30-min cooldown, 3/day, 10/week.
+   *
+   * FIX (Bug 7): weekly limit now resets every Monday via log-based counting.
+   * FIX (Bug 8): daily limit is now actually enforced (was declared but never checked).
+   * FIX: throws TRPCError instead of plain Error so the client gets a proper error code.
    */
   refresh: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.user.id;
     const now = new Date();
 
-    // Check if API key exists
-    const existing = await prisma.userApi.findUnique({
-      where: { userId },
-    });
+    let existing = await prisma.userApi.findUnique({ where: { userId } });
 
+    // First-time user — create key, no cooldown needed
     if (!existing) {
-      // Create new record if none exists (first time user)
-      const newApiKey = nanoid(32);
-      const created = await prisma.userApi.create({
-        data: {
-          userId,
-          apiKey: newApiKey,
-          isActive: true,
-          rateLimit: 100,
-          refreshCount: 0,
-          lastRefreshedAt: now,
-        },
+      const created = await prisma.$transaction(async (tx) => {
+        const userApi = await tx.userApi.create({
+          data: { userId, apiKey: nanoid(32), isActive: true, rateLimit: 100, lastRefreshedAt: now },
+        });
+        await tx.userApiRefreshLog.create({ data: { userId } });
+        return userApi;
       });
 
       return {
         apiKey: created.apiKey,
         isActive: created.isActive,
         createdAt: created.createdAt.toISOString(),
-        lastRefreshedAt: created.lastRefreshedAt?.toISOString(),
-        refreshCount: created.refreshCount,
+        lastRefreshedAt: created.lastRefreshedAt?.toISOString() ?? null,
         regenerated: false,
       };
     }
 
-    // Check cooldown period (30 minutes)
-    const lastRefreshed = existing.lastRefreshedAt || existing.createdAt;
-    const minutesSinceLastRefresh = (now.getTime() - lastRefreshed.getTime()) / (1000 * 60);
+    // ── Rate limit checks ──────────────────────────────────────────────────
 
-    if (minutesSinceLastRefresh < COOLDOWN_MINUTES) {
-      const minutesRemaining = Math.ceil(COOLDOWN_MINUTES - minutesSinceLastRefresh);
-      throw new Error(
-        `Please wait ${minutesRemaining} more minute(s) before refreshing again.`
-      );
+    const lastRefreshed = existing.lastRefreshedAt ?? existing.createdAt;
+    const minutesSinceLast = (now.getTime() - lastRefreshed.getTime()) / 60_000;
+
+    if (minutesSinceLast < COOLDOWN_MINUTES) {
+      const minutesRemaining = Math.ceil(COOLDOWN_MINUTES - minutesSinceLast);
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `Please wait ${minutesRemaining} more minute(s) before refreshing again.`,
+      });
     }
 
-    // Check weekly limit (10 per week)
-    if (existing.refreshCount >= WEEKLY_LIMIT) {
-      throw new Error(
-        `You have reached the weekly limit of ${WEEKLY_LIMIT} refreshes. Please try again next week.`
-      );
+    // FIX (Bug 8): daily limit is now enforced
+    const dailyCount = await prisma.userApiRefreshLog.count({
+      where: { userId, createdAt: { gte: startOfTodayUTC() } },
+    });
+
+    if (dailyCount >= DAILY_LIMIT) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `Daily limit of ${DAILY_LIMIT} refreshes reached. Try again tomorrow.`,
+      });
     }
 
-    // Note: Daily limit would require tracking refresh timestamps in a separate table
-    // For now, we're implementing cooldown + weekly limit which provides good protection
-    // To add daily limit, we'd need a UserApiRefreshLog table
+    // FIX (Bug 7): weekly limit based on real timestamps — resets every Monday
+    const weeklyCount = await prisma.userApiRefreshLog.count({
+      where: { userId, createdAt: { gte: startOfThisWeekUTC() } },
+    });
 
-    // Update existing record with new key
-    const updated = await prisma.userApi.update({
-      where: { userId },
-      data: {
-        apiKey: nanoid(32),
-        isActive: true,
-        lastRefreshedAt: now,
-        refreshCount: existing.refreshCount + 1,
-      },
+    if (weeklyCount >= WEEKLY_LIMIT) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `Weekly limit of ${WEEKLY_LIMIT} refreshes reached. Try again next Monday.`,
+      });
+    }
+
+    // ── Atomically rotate key + record the refresh ─────────────────────────
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const userApi = await tx.userApi.update({
+        where: { userId },
+        data: {
+          apiKey: nanoid(32),
+          isActive: true,
+          lastRefreshedAt: now,
+          // Keep refreshCount for legacy compatibility but it's no longer
+          // used for limit enforcement — the log table is the source of truth
+          refreshCount: { increment: 1 },
+        },
+      });
+
+      await tx.userApiRefreshLog.create({ data: { userId } });
+
+      return userApi;
     });
 
     return {
       apiKey: updated.apiKey,
       isActive: updated.isActive,
       createdAt: updated.createdAt.toISOString(),
-      lastRefreshedAt: updated.lastRefreshedAt?.toISOString(),
-      refreshCount: updated.refreshCount,
+      lastRefreshedAt: updated.lastRefreshedAt?.toISOString() ?? null,
       regenerated: true,
     };
   }),

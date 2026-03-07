@@ -1,18 +1,24 @@
 // lib/bot.ts
 import { config } from "dotenv";
 config({ path: "/var/www/manager/.env" });
-
 import { Bot } from "grammy";
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
-  throw new Error("TELEGRAM_BOT_TOKEN is not set");
+  throw new Error("[bot] TELEGRAM_BOT_TOKEN is not set");
+}
+
+// FIX (Bug 6): guard APP_URL — missing env var would silently send
+// web_app: { url: undefined } which Telegram API rejects
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
+if (!APP_URL) {
+  throw new Error("[bot] NEXT_PUBLIC_APP_URL is not set");
 }
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN);
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
-
 bot.command("start", async (ctx) => {
+  // FIX (Bug 7): removed protect_content from /start — forwarding the
+  // welcome message is free viral distribution for your Mini App
   await ctx.replyWithPhoto("https://i.ibb.co/VKDpWf0/meow.png", {
     caption:
       "👋 *Welcome to MeowSMS!*\n\n" +
@@ -21,7 +27,6 @@ bot.command("start", async (ctx) => {
       "💰 Pay only when you receive SMS\n\n" +
       "Tap *Open App* below to get started 👇",
     parse_mode: "Markdown",
-    protect_content: true,
     reply_markup: {
       inline_keyboard: [
         [
@@ -38,12 +43,12 @@ bot.command("start", async (ctx) => {
 bot.command("help", async (ctx) => {
   await ctx.reply(
     "🐱 *MeowSMS Help*\n\n" +
-      "• /start — Open the app\n" +
-      "• /help — Show this message\n\n" +
-      "Need support? Open the app and tap Support.",
+    "• /start — Open the app\n" +
+    "• /help — Show this message\n\n" +
+    "Need support? Open the app and tap Support.",
     {
       parse_mode: "Markdown",
-      protect_content: true,
+      protect_content: true, // kept on /help — less viral value
     },
   );
 });

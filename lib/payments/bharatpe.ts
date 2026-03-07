@@ -2,8 +2,7 @@
  * BharatPe Payment Client
  *
  * Used to verify UPI transactions by querying the BharatPe API.
- * This client is used for wallet deposits where users pay via UPI
- * to the merchant's QR code and verify their transaction using the UTR number.
+ * Users pay via UPI to the merchant QR and verify using their UTR number.
  */
 
 export interface BharatPeTransaction {
@@ -11,11 +10,12 @@ export interface BharatPeTransaction {
   paymentTimestamp: number;
   internalUtr: string;
   bankReferenceNo: string;
-  amount: number;
+  // FIX (Bug 11): API actually returns string in some cases — reflect reality
+  amount: number | string;
   payerName?: string;
   payerHandle?: string;
-  type: string;  // "PAYMENT_RECV", "REFUND", etc.
-  status: string;  // "SUCCESS", "FAILED", "PENDING", etc.
+  type: string;
+  status: string;
   payeeIdentifier: string;
   merchantId: number;
   txnSubType?: string;
@@ -28,109 +28,79 @@ export interface BharatPeApiResponse {
   responseCode?: string;
   data?: {
     collection?: number;
-    services?: any;
+    services?: unknown;
     transactions?: BharatPeTransaction[];
   };
 }
 
 export interface VerifyTransactionResult {
   found: boolean;
-  canCredit?: boolean;  // Whether this transaction can be credited
+  canCredit?: boolean;
   amount?: number;
   payerName?: string;
   payerVpa?: string;
   transactionDate?: string;
   utr?: string;
-  payeeIdentifier?: string;  // The merchant VPA that received the payment
-  transactionStatus?: string;  // "SUCCESS", "FAILED", etc.
-  transactionType?: string;    // "PAYMENT_RECV", "REFUND", etc.
+  payeeIdentifier?: string;
+  transactionStatus?: string;
+  transactionType?: string;
 }
 
 export interface BharatPeClientConfig {
   merchantId: string;
   token: string;
+  // FIX (Bug 10): configurable timeout, default 15s
+  timeoutMs?: number;
 }
 
-/**
- * Error class for BharatPe API errors
- */
 export class BharatPeError extends Error {
   constructor(
     message: string,
     public readonly statusCode?: number,
-    public readonly responseBody?: string
+    public readonly responseBody?: string,
   ) {
     super(message);
-    this.name = 'BharatPeError';
+    this.name = "BharatPeError";
   }
 }
 
-/**
- * BharatPe Client for verifying UPI transactions
- *
- * @example
- * ```typescript
- * const client = new BharatPeClient({
- *   merchantId: 'your-merchant-id',
- *   token: 'your-auth-token'
- * });
- *
- * const result = await client.verifyTransaction('123456789012');
- * if (result.found) {
- *   console.log(`Found payment of ${result.amount} from ${result.payerName}`);
- * }
- * ```
- */
 export class BharatPeClient {
-  private readonly baseUrl = 'https://payments-tesseract.bharatpe.in';
+  private readonly baseUrl = "https://payments-tesseract.bharatpe.in";
   private readonly merchantId: string;
   private readonly token: string;
+  private readonly timeoutMs: number;
 
   constructor(config: BharatPeClientConfig) {
-    if (!config.merchantId) {
-      throw new Error('BharatPeClient: merchantId is required');
-    }
-    if (!config.token) {
-      throw new Error('BharatPeClient: token is required');
-    }
-
+    if (!config.merchantId) throw new Error("BharatPeClient: merchantId is required");
+    if (!config.token) throw new Error("BharatPeClient: token is required");
     this.merchantId = config.merchantId;
     this.token = config.token;
+    this.timeoutMs = config.timeoutMs ?? 15_000;
   }
 
-  /**
-   * Verify a UPI transaction by UTR (Unique Transaction Reference) number
-   *
-   * @param utr - The 12-digit UTR/bankReferenceNo from the UPI transaction
-   * @returns Verification result indicating if the transaction was found
-   * @throws BharatPeError if the API request fails
-   */
   async verifyTransaction(utr: string): Promise<VerifyTransactionResult> {
-    // Validate UTR format (typically 12 digits)
-    if (!utr || typeof utr !== 'string') {
-      return { found: false };
-    }
+    if (!utr || typeof utr !== "string") return { found: false };
 
     const sanitizedUtr = utr.trim();
-
-    if (sanitizedUtr.length === 0) {
-      return { found: false };
-    }
+    if (sanitizedUtr.length === 0) return { found: false };
 
     try {
       const transactions = await this.fetchTransactions();
 
-      // Find transaction matching the UTR/bankReferenceNo
+      // FIX (Bug 9): check BOTH bankReferenceNo and internalUtr.
+      // Different UPI apps show different UTR fields to the user — users
+      // submitting internalUtr would always get "not found" with the old code.
       const matchingTransaction = transactions.find(
-        (tx) => tx.bankReferenceNo === sanitizedUtr
+        (tx) =>
+          tx.bankReferenceNo === sanitizedUtr ||
+          tx.internalUtr === sanitizedUtr,
       );
 
       if (!matchingTransaction) {
         return { found: false };
       }
 
-      // Only credit successful received payments
-      if (matchingTransaction.status !== 'SUCCESS') {
+      if (matchingTransaction.status !== "SUCCESS") {
         return {
           found: true,
           canCredit: false,
@@ -139,8 +109,7 @@ export class BharatPeClient {
         };
       }
 
-      // Only credit PAYMENT_RECV transactions (not refunds or other types)
-      if (matchingTransaction.type !== 'PAYMENT_RECV') {
+      if (matchingTransaction.type !== "PAYMENT_RECV") {
         return {
           found: true,
           canCredit: false,
@@ -149,12 +118,18 @@ export class BharatPeClient {
         };
       }
 
+      // FIX (Bug 11): normalise amount — API returns string in some responses
+      const amount =
+        typeof matchingTransaction.amount === "number"
+          ? matchingTransaction.amount
+          : parseFloat(matchingTransaction.amount as string) || 0;
+
       return {
         found: true,
         canCredit: true,
-        amount: typeof matchingTransaction.amount === 'number' ? matchingTransaction.amount : parseFloat(matchingTransaction.amount) || 0,
+        amount,
         payerName: matchingTransaction.payerName,
-        payerVpa: matchingTransaction.payerHandle, // API returns payerHandle, map to payerVpa for compatibility
+        payerVpa: matchingTransaction.payerHandle,
         transactionDate: new Date(matchingTransaction.paymentTimestamp).toISOString(),
         utr: matchingTransaction.bankReferenceNo,
         payeeIdentifier: matchingTransaction.payeeIdentifier,
@@ -162,95 +137,90 @@ export class BharatPeClient {
         transactionType: matchingTransaction.type,
       };
     } catch (error) {
-      if (error instanceof BharatPeError) {
-        throw error;
-      }
-
-      // Wrap unexpected errors
+      if (error instanceof BharatPeError) throw error;
       throw new BharatPeError(
-        `Failed to verify transaction: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to verify transaction: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
 
-  /**
-   * Fetch all transactions from BharatPe API
-   *
-   * @returns Array of transactions
-   * @throws BharatPeError if the API request fails
-   */
   private async fetchTransactions(): Promise<BharatPeTransaction[]> {
-    const url = `${this.baseUrl}/api/v1/merchant/transactions?module=PAYMENT_QR&merchantId=${encodeURIComponent(this.merchantId)}`;
+    // FIX (Bug 8): add date filter to avoid fetching all-time transactions.
+    // Query last 7 days only — UTRs older than that are very unlikely to be
+    // submitted for a wallet deposit, and this dramatically reduces payload size.
+    const now = Math.floor(Date.now() / 1000);
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60;
+
+    const url =
+      `${this.baseUrl}/api/v1/merchant/transactions` +
+      `?module=PAYMENT_QR` +
+      `&merchantId=${encodeURIComponent(this.merchantId)}` +
+      `&startTime=${sevenDaysAgo}` +
+      `&endTime=${now}`;
+
+    // FIX (Bug 10): abort if BharatPe takes more than timeoutMs
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
       const response = await fetch(url, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'token': this.token,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
+          token: this.token,
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
+        signal: controller.signal,
       });
 
+      clearTimeout(timer);
+
       if (!response.ok) {
-        const responseBody = await this.readResponseBody(response);
+        const body = await this.readResponseBody(response);
         throw new BharatPeError(
           `BharatPe API error: ${response.status} ${response.statusText}`,
           response.status,
-          responseBody
+          body,
         );
       }
 
       const data: BharatPeApiResponse = await response.json();
 
-      // BharatPe API returns status as boolean (true/false) not string
-      // Also returns responseMessage for errors, not message
-      const isSuccess = data.status === true ||
-                      (typeof data.status === 'string' && (data.status === 'SUCCESS' || data.status === 'OK'));
+      const isSuccess =
+        data.status === true ||
+        (typeof data.status === "string" &&
+          (data.status === "SUCCESS" || data.status === "OK"));
 
       if (!isSuccess) {
-        const errorMessage = (data as any).responseMessage || data.message || 'Unknown error';
-        throw new BharatPeError(
-          `BharatPe API error: ${errorMessage}`
-        );
+        const msg =
+          (data as Record<string, unknown>).responseMessage ||
+          data.message ||
+          "Unknown error";
+        throw new BharatPeError(`BharatPe API error: ${msg}`);
       }
 
-      // Transactions are nested under data.data.transactions
       return data.data?.transactions || [];
     } catch (error) {
-      if (error instanceof BharatPeError) {
-        throw error;
-      }
-
-      // Handle network errors
-      throw new BharatPeError(
-        `Network error while fetching transactions: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      clearTimeout(timer);
+      if (error instanceof BharatPeError) throw error;
+      // Provide a cleaner message for AbortError (timeout)
+      const msg =
+        error instanceof Error && error.name === "AbortError"
+          ? `BharatPe API timed out after ${this.timeoutMs}ms`
+          : `Network error: ${error instanceof Error ? error.message : "Unknown error"}`;
+      throw new BharatPeError(msg);
     }
   }
 
-  /**
-   * Safely read response body as text
-   */
   private async readResponseBody(response: Response): Promise<string> {
     try {
       return await response.text();
     } catch {
-      return '[Unable to read response body]';
+      return "[Unable to read response body]";
     }
   }
 }
 
-/**
- * Factory function to create a BharatPe client from settings
- *
- * @param merchantId - The merchant ID from settings
- * @param token - The authentication token from settings
- * @returns BharatPeClient instance
- */
-export function createBharatPeClient(
-  merchantId: string,
-  token: string
-): BharatPeClient {
+export function createBharatPeClient(merchantId: string, token: string): BharatPeClient {
   return new BharatPeClient({ merchantId, token });
 }
