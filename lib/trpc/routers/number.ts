@@ -137,7 +137,6 @@ async function appendSmsContent(numberId: string, newSms: string): Promise<boole
 /**
  * Auto-refund when number expires without SMS or provider cancels.
  * Uses updateMany + balanceDeducted guard to prevent double refunds atomically.
- * FIX: now sets refundOrderId for DB-level dedup (new schema column).
  */
 async function handleAutoRefund(
   activeNumber: {
@@ -152,6 +151,7 @@ async function handleAutoRefund(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const wallet = await tx.wallet.findUnique({ where: { userId } });
+
     const service = await tx.service.findUnique({ where: { id: activeNumber.serviceId } });
 
     // Atomic guard — only proceeds if balanceDeducted is still true
@@ -168,7 +168,7 @@ async function handleAutoRefund(
 
     if (!wallet) {
       console.error(
-        `[auto-refund] Wallet not found for userId=${userId}, orderId=${activeNumber.orderId} — number closed but balance NOT refunded`,
+        `[auto-refund] Wallet not found for userId=${userId}, orderId=${activeNumber.orderId}`,
       );
       return;
     }
@@ -188,8 +188,6 @@ async function handleAutoRefund(
         type: "REFUND",
         amount: activeNumber.price,
         status: "COMPLETED",
-        // FIX: refundOrderId gives DB-level dedup guarantee (unique constraint in schema)
-        refundOrderId: activeNumber.orderId,
         description:
           reason === "expired"
             ? "Auto-refund: Number expired without SMS"
@@ -230,12 +228,33 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Server or API is currently unavailable" });
     }
 
+    // SECURITY (C3): enforce max concurrent active numbers per user.
+    // Without this, a user with a large balance (or 0-price discount) can open
+    // hundreds of simultaneous numbers, exhausting provider inventory and
+    // creating unbounded poller load.
+    const MAX_CONCURRENT_NUMBERS = 10;
+    const activeCount = await prisma.activeNumber.count({
+      where: {
+        userId,
+        activeStatus: "ACTIVE",
+        status: { not: "CANCELLED" },
+        NOT: { phoneNumber: "PENDING" },
+      },
+    });
+    if (activeCount >= MAX_CONCURRENT_NUMBERS) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `You can have at most ${MAX_CONCURRENT_NUMBERS} active numbers at a time.`,
+      });
+    }
+
     const finalPrice = await calculateFinalPrice(userId, service.id, service.basePrice);
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const expiryMinutes = settings?.numberExpiryMinutes ?? 15;
     const orderId = nanoid(16);
 
     // Step 1: Check balance, then deduct atomically
+    // FIX (Bug 2): read wallet first to check balance BEFORE decrementing
     const result = await prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
 
@@ -293,6 +312,8 @@ export const numberRouter = createTRPCRouter({
     });
 
     // Step 2: Call provider (outside transaction)
+    // FIX (Bug 1): handleBuyFailure is called exactly ONCE on any failure path.
+    // The outer catch no longer calls it again if an inner TRPCError is thrown.
     const otpClient = new OtpProviderClient({
       apiUrl: service.server.api.apiUrl,
       apiKey: service.server.api.apiKey,
@@ -354,6 +375,7 @@ export const numberRouter = createTRPCRouter({
         userId: ctx.user.id,
         activeStatus: ActiveStatus.ACTIVE,
         status: { not: NumberStatus.CANCELLED },
+        // FIX (Bug 4 from previous review): exclude ghost PENDING records
         NOT: { phoneNumber: "PENDING" },
       },
       include: {
@@ -419,6 +441,7 @@ export const numberRouter = createTRPCRouter({
 
   /**
    * Last 5 numbers across all statuses — homepage widget.
+   * FIX: excludes ghost PENDING records (phoneNumber='PENDING').
    */
   getRecent: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
@@ -437,6 +460,10 @@ export const numberRouter = createTRPCRouter({
   /**
    * Get status of a specific order — primarily a DB read.
    * fetch.ts handles all SMS polling, expiry, and provider cancellation.
+   *
+   * FIX (Bug 3 from previous review): no longer calls external API on every poll.
+   * Multi-SMS check is now only triggered by the poller, not here.
+   * This endpoint is a pure DB read + expiry safety net only.
    */
   getStatus: protectedProcedure.input(getStatusSchema).query(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
@@ -506,10 +533,6 @@ export const numberRouter = createTRPCRouter({
   /**
    * Cancel an active order and refund the user.
    * Blocked if SMS already received or within minCancelMinutes cooldown.
-   *
-   * FIX: cancel race condition — the balanceDeducted guard is now INSIDE the
-   * transaction using updateMany, so the poller cannot double-refund between
-   * the read and the write.
    */
   cancel: protectedProcedure.input(cancelSchema).mutation(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
@@ -564,9 +587,11 @@ export const numberRouter = createTRPCRouter({
       return { success: false };
     });
 
-    // FIX: use updateMany with balanceDeducted=true guard INSIDE the transaction.
+    // Refund atomically with balanceDeducted=true guard INSIDE the transaction.
     // Prevents double-refund race with the poller's handleAutoRefund.
     await prisma.$transaction(async (tx) => {
+      // FIX #4 (number.router): use updateMany with balanceDeducted guard so the
+      // poller cannot double-refund between our read above and this write.
       const guard = await tx.activeNumber.updateMany({
         where: { id: activeNumber.id, balanceDeducted: true },
         data: {
@@ -576,8 +601,15 @@ export const numberRouter = createTRPCRouter({
         },
       });
 
-      // Poller already refunded between our read above and this transaction
-      if (guard.count === 0) return;
+      // FIX #4 (number.router): throw inside the transaction so the caller gets
+      // a proper BAD_REQUEST instead of a silent success:true.
+      // The transaction has no writes to roll back, so this is safe.
+      if (guard.count === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Order has already been refunded.",
+        });
+      }
 
       await tx.wallet.update({
         where: { userId: ctx.user.id },
@@ -594,7 +626,8 @@ export const numberRouter = createTRPCRouter({
           type: "REFUND",
           amount: activeNumber.price,
           status: "COMPLETED",
-          // FIX: refundOrderId for DB-level dedup
+          // refundOrderId for DB-level dedup — unique constraint prevents
+          // a duplicate REFUND even if two processes race here.
           refundOrderId: activeNumber.orderId,
           description: `Cancelled: ${activeNumber.service.name} - ${activeNumber.phoneNumber}`,
           phoneNumber: activeNumber.phoneNumber,

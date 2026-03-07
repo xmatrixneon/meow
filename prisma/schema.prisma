@@ -1,5 +1,4 @@
 // prisma/schema.prisma
-
 generator client {
   provider = "prisma-client"
   output   = "../app/generated/prisma"
@@ -8,8 +7,6 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-
-// ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum TransactionType {
   DEPOSIT
@@ -42,74 +39,68 @@ enum ActiveStatus {
   CLOSED
 }
 
-/// FIX: was a plain String — enum prevents "active"/"Active" typos that would
-/// silently block or unblock accounts.
+/// User account standing. Always compare with this enum — never raw strings.
 enum UserStatus {
   ACTIVE
   BLOCKED
   SUSPENDED
 }
 
-// ─── Models ───────────────────────────────────────────────────────────────────
-
 model User {
-  id                    String    @id @default(cuid())
-  email                 String?   @unique
-  emailVerified         Boolean   @default(false)
-  name                  String?
-  image                 String?
-  telegramId            String    @unique
-  telegramUsername      String?
-  firstName             String?
-  lastName              String?
-  languageCode          String?
-  isPremium             Boolean?  @default(false)
-  allowsWriteToPm       Boolean?  @default(false)
-  photoUrl              String?
-  addedToAttachmentMenu Boolean?  @default(false)
-  authDate              DateTime?
-  queryId               String?
-  chatInstance          String?
-  chatType              String?
-  startParam            String?
-  canSendAfter          Int?
-  isAdmin               Boolean   @default(false)
-  deletedAt             DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  accounts             Account[]
-  sessions             Session[]
-  wallet               Wallet?
-  numbers              ActiveNumber[]
-  customPrices         CustomPrice[]
-  promoHistory         PromocodeHistory[]
+  id              String    @id @default(cuid())
+  email           String?   @unique
+  emailVerified   Boolean   @default(false)
+  name            String?
+  image           String?
+  telegramId           String   @unique
+  telegramUsername     String?
+  firstName            String?
+  lastName             String?
+  languageCode         String?
+  isPremium            Boolean? @default(false)
+  allowsWriteToPm      Boolean? @default(false)
+  photoUrl             String?
+  addedToAttachmentMenu Boolean? @default(false)
+  authDate        DateTime?
+  queryId         String?
+  chatInstance    String?
+  chatType        String?
+  startParam      String?
+  canSendAfter    Int?
+  isAdmin         Boolean   @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  accounts        Account[]
+  sessions        Session[]
+  wallet          Wallet?
+  numbers         ActiveNumber[]
+  customPrices    CustomPrice[]
+  promoHistory    PromocodeHistory[]
   auditLogsAsTarget    UserAuditLog[] @relation("AuditTarget")
   auditLogsAsPerformer UserAuditLog[] @relation("AuditPerformer")
-  userApi              UserApi?
-  userData             UserData?
+  userApi         UserApi?
+  userData        UserData?
 }
 
 model Account {
-  id               String    @id @default(cuid())
-  userId           String
-  type             String    @default("oauth")
-  providerId       String
-  accountId        String
-  refreshToken     String?   @default("")
-  accessToken      String?   @default("")
-  expiresAt        DateTime?
-  tokenType        String?   @default("")
-  scope            String?   @default("")
-  idToken          String?   @default("")
-  sessionState     String?   @default("")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  userId       String
+  type         String    @default("oauth")
+  providerId   String
+  accountId    String
+  refreshToken String?   @default("")
+  accessToken  String?   @default("")
+  expiresAt    DateTime?
+  tokenType    String?   @default("")
+  scope        String?   @default("")
+  idToken      String?   @default("")
+  sessionState String?   @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   telegramId       String?
   telegramUsername String?
-
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([providerId, accountId])
 }
 
@@ -122,9 +113,7 @@ model Session {
   userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId])
 }
 
@@ -135,44 +124,48 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
   @@unique([identifier, value])
 }
 
 model Wallet {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  /// FIX: DB-level non-negative constraint added via migration (see below)
-  balance       Decimal  @default(0) @db.Decimal(10, 2)
-  /// FIX: DB-level non-negative constraint added via migration (see below)
-  totalSpent    Decimal  @default(0) @db.Decimal(10, 2)
-  /// FIX: DB-level non-negative constraint added via migration (see below)
-  totalOtp      Int      @default(0)
-  /// FIX: DB-level non-negative constraint added via migration (see below)
-  totalRecharge Decimal  @default(0) @db.Decimal(10, 2)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  /// Non-negative enforced by DB CHECK constraint.
+  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
+  balance       Decimal       @default(0) @db.Decimal(10, 2)
+  /// Non-negative enforced by DB CHECK constraint.
+  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
+  totalSpent    Decimal       @default(0) @db.Decimal(10, 2)
+  /// Non-negative enforced by DB CHECK constraint.
+  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
+  totalOtp      Int           @default(0)
+  /// Non-negative enforced by DB CHECK constraint.
+  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
+  totalRecharge Decimal       @default(0) @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
 }
 
 model Transaction {
-  id          String            @id @default(cuid())
-  walletId    String
-  type        TransactionType
-  amount      Decimal           @db.Decimal(10, 2)
-  status      TransactionStatus @default(COMPLETED)
-  description String?
-  /// Unique dedup key for deposits (UTR). Null for other types.
-  txnId       String?           @unique
-  /// FIX: dedicated indexed column for refund dedup — replaces metadata JSON lookup.
-  /// Populated on REFUND transactions with the source orderId.
-  /// DB unique constraint prevents duplicate refunds surviving a poller race.
-  refundOrderId String?         @unique
-  phoneNumber String?
-  metadata    Json?
-  createdAt   DateTime          @default(now())
+  id            String            @id @default(cuid())
+  walletId      String
+  type          TransactionType
+  /// Amount is always positive (stored as absolute value).
+  /// Sign is determined by TransactionType: PURCHASE/REFUND/PROMO/REFERRAL/ADJUSTMENT
+  /// Non-negative enforced by DB CHECK — see add_wallet_check_constraints.sql
+  amount        Decimal           @db.Decimal(10, 2)
+  status        TransactionStatus @default(COMPLETED)
+  description   String?
+  /// Unique dedup key for deposits (UTR). Null for other transaction types.
+  txnId         String?           @unique
+  /// Dedup key for refunds — stores the source orderId.
+  /// Unique constraint prevents duplicate refunds surviving a poller/cancel race.
+  refundOrderId String?           @unique
+  phoneNumber   String?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
@@ -182,18 +175,15 @@ model Transaction {
 }
 
 model ApiCredential {
-  id        String    @id @default(cuid())
+  id        String      @id @default(cuid())
   name      String
   apiUrl    String
-  apiKey    String
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  servers OtpServer[]
-
-  /// FIX: added indexes — apiKey is looked up on every stubs API request
-  @@index([apiKey])
+  /// SECURITY: apiKey stored in DB — rotate via admin panel, never commit to source.
+  apiKey    String      @unique
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  servers   OtpServer[]
   @@index([isActive])
 }
 
@@ -208,30 +198,26 @@ model OtpServer {
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
-  services Service[]
-  numbers  ActiveNumber[]
-  api      ApiCredential @relation(fields: [apiId], references: [id])
-
+  services    Service[]
+  numbers     ActiveNumber[]
+  api         ApiCredential @relation(fields: [apiId], references: [id])
   @@index([apiId])
   @@index([isActive])
 }
 
 model Service {
-  id        String   @id @default(cuid())
-  code      String
-  name      String
-  serverId  String
-  basePrice Decimal  @db.Decimal(10, 2)
-  iconUrl   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id           String        @id @default(cuid())
+  code         String
+  name         String
+  serverId     String
+  basePrice    Decimal       @db.Decimal(10, 2)
+  iconUrl      String?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   server       OtpServer     @relation(fields: [serverId], references: [id])
   purchases    ActiveNumber[]
   customPrices CustomPrice[]
-
   @@unique([code, serverId])
   @@index([isActive])
   @@index([serverId])
@@ -246,57 +232,51 @@ model ActiveNumber {
   numberId        String
   phoneNumber     String
   serverId        String
+  /// Purchase price at time of buy. Non-negative (0.00 allowed for 100% discount).
+  /// Enforced by DB CHECK — see add_wallet_check_constraints.sql
   price           Decimal      @db.Decimal(10, 2)
   status          NumberStatus @default(PENDING)
   activeStatus    ActiveStatus @default(ACTIVE)
   smsContent      Json?
   balanceDeducted Boolean      @default(false)
+  // FIX (Bug 6): removed redundant buyTime — use createdAt everywhere
   createdAt       DateTime     @default(now())
   expiresAt       DateTime
   updatedAt       DateTime     @updatedAt
-
   user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   service Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   server  OtpServer @relation(fields: [serverId], references: [id])
-
   @@index([userId, status])
   @@index([status, expiresAt])
   @@index([activeStatus])
   @@index([userId, activeStatus, status])
   @@index([serverId])
+  // FIX (Bug 4): composite index for orderId+userId used in cancel + stubs API
   @@index([orderId, userId])
-  /// FIX: poller queries activeStatus+expiresAt — was missing this composite index
+  // PERF: poller fetches WHERE activeStatus=ACTIVE AND expiresAt >= cutoff
+  // This index makes that scan O(active_count) not O(total_history)
   @@index([activeStatus, expiresAt])
-  /// FIX: phoneNumber queried in cancel checks and transaction descriptions
-  @@index([phoneNumber])
 }
 
 model Promocode {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  amount    Decimal  @db.Decimal(10, 2)
-  maxUses   Int      @default(1)
-  /// NOTE: usedCount can drift from actual PromocodeHistory rows if a transaction
-  /// partially fails. Consider replacing with COUNT(history) for accuracy.
-  usedCount Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  history PromocodeHistory[]
+  id        String             @id @default(cuid())
+  code      String             @unique
+  amount    Decimal            @db.Decimal(10, 2)
+  maxUses   Int                @default(1)
+  usedCount Int                @default(0)
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  history   PromocodeHistory[]
 }
 
 model PromocodeHistory {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   promocodeId String
   userId      String
-  amount      Decimal  @db.Decimal(10, 2)
-  createdAt   DateTime @default(now())
-
-  promocode Promocode @relation(fields: [promocodeId], references: [id])
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  /// This unique constraint is the authoritative race guard for promo redemption —
-  /// the P2002 error is caught in walletRouter.redeemPromo.
+  amount      Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  promocode   Promocode @relation(fields: [promocodeId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([promocodeId, userId])
 }
 
@@ -306,28 +286,26 @@ model CustomPrice {
   serviceId String
   discount  Decimal      @db.Decimal(10, 2)
   type      DiscountType
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  service Service @relation(fields: [serviceId], references: [id])
-
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service   Service      @relation(fields: [serviceId], references: [id])
   @@unique([userId, serviceId])
 }
 
 model Settings {
-  id                      String     @id @default("1")
+  id                      String  @id @default("1")
   bharatpeMerchantId      String?
   bharatpeToken           String?
   bharatpeQrImage         String?
-  /// FIX: DB CHECK constraint added via migration: minRechargeAmount <= maxRechargeAmount
-  minRechargeAmount       Decimal    @default(10)   @db.Decimal(10, 2)
-  maxRechargeAmount       Decimal    @default(5000) @db.Decimal(10, 2)
+  minRechargeAmount       Decimal @default(10)   @db.Decimal(10, 2)
+  maxRechargeAmount       Decimal @default(5000) @db.Decimal(10, 2)
   upiId                   String?
-  referralPercent         Float      @default(0)
-  minRedeem               Decimal    @default(0)    @db.Decimal(10, 2)
-  numberExpiryMinutes     Int        @default(20)
-  currency                String     @default("₹")
-  minCancelMinutes        Int        @default(2)
-  maintenanceMode         Boolean    @default(false)
+  referralPercent         Float   @default(0)
+  minRedeem               Decimal @default(0) @db.Decimal(10, 2)
+  numberExpiryMinutes     Int     @default(20)
+  // FIX (Bug 7): store ₹ symbol directly — consistent with UI expectation
+  currency                String  @default("₹")
+  minCancelMinutes        Int     @default(2)
+  maintenanceMode         Boolean @default(false)
   telegramHelpUrl         String?
   telegramSupportUsername String?
   apiDocsBaseUrl          String?
@@ -343,37 +321,32 @@ model UserApi {
   lastRefreshedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshLogs UserApiRefreshLog[]
-
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshLogs     UserApiRefreshLog[]
   @@index([apiKey])
   @@index([userId])
 }
 
+// New table for api-key.ts refresh rate limiting (Bug 7+8 fix)
 model UserApiRefreshLog {
   id        String   @id @default(cuid())
   userId    String
   createdAt DateTime @default(now())
-
-  userApi UserApi @relation(fields: [userId], references: [userId], onDelete: Cascade)
-
+  userApi   UserApi  @relation(fields: [userId], references: [userId], onDelete: Cascade)
   @@index([userId, createdAt])
 }
 
 model UserData {
-  id          String     @id @default(cuid())
-  userId      String     @unique
-  /// FIX: was plain String — enum prevents typo bugs in status checks
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  /// Use UserStatus enum for compile-time safety — prevents typo bugs in status checks.
   status      UserStatus @default(ACTIVE)
   lastLogin   DateTime?
-  apiCalls    Int        @default(0)
+  apiCalls    Int       @default(0)
   lastApiCall DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId])
   @@index([status])
 }
@@ -386,10 +359,8 @@ model UserAuditLog {
   changes   Json?
   reason    String?
   createdAt DateTime @default(now())
-
   user  User @relation("AuditTarget",    fields: [userId],  references: [id])
   admin User @relation("AuditPerformer", fields: [adminId], references: [id])
-
   @@index([userId])
   @@index([adminId])
   @@index([createdAt])
