@@ -56,10 +56,20 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      // Type assertion needed - better-auth-telegram return type is not fully typed
-      const resultData = result as unknown as { user?: User };
-      const sessionUser = resultData.user;
-      setUser(sessionUser ?? null);
+      // result.data.user is correct per the better-auth-telegram docs
+      // (POST /telegram/miniapp/signin returns { user, session }).
+      // However the library doesn't expose this in its TS definitions —
+      // result.data is typed as {} — so we cast only this one extraction.
+      const sessionUser = (result.data as { user?: User } | null)?.user;
+
+      if (!sessionUser) {
+        // Sign-in succeeded but returned no user — treat as auth failure
+        setState("error");
+        setError(getAuthError("VALIDATION_FAILED"));
+        return;
+      }
+
+      setUser(sessionUser);
       setState("authenticated");
     } catch (err) {
       setState("error");
@@ -82,10 +92,18 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
         if (initData) {
           const params = new URLSearchParams(initData);
           const userStr = params.get("user");
-          const telegramId = userStr ? JSON.parse(userStr)?.id?.toString() : null;
+
+          // FIX: wrap JSON.parse in try/catch — malformed initData would throw
+          // uncaught and leave the user stuck on the loading screen.
+          let telegramId: string | null = null;
+          try {
+            telegramId = userStr ? JSON.parse(userStr)?.id?.toString() : null;
+          } catch {
+            console.warn("[auth] Failed to parse Telegram user from initData");
+          }
 
           if (telegramId && sessionUser.telegramId !== telegramId) {
-            // Session mismatch - sign out and re-auth
+            // Session mismatch — sign out and re-auth
             await authClient.signOut();
             await signIn();
             return;
@@ -95,7 +113,7 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
         setUser(sessionUser);
         setState("authenticated");
       } else {
-        // No session - try to sign in
+        // No session — try to sign in
         await signIn();
       }
     } catch (err) {
@@ -124,7 +142,10 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
     } finally {
       setUser(null);
       setState("unauthenticated");
-      setError(getAuthError("SESSION_EXPIRED"));
+      // FIX: don't set SESSION_EXPIRED error on explicit sign out — it's not
+      // an error, it's intentional. Setting an error here would show an error
+      // message to the user after they deliberately signed out.
+      setError(null);
     }
   }, []);
 

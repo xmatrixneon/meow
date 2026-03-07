@@ -347,7 +347,7 @@ export default function MiniAppPage() {
     onSuccess: (data) => {
       if (data.success && data.number) {
         utils.number.getActive.invalidate();
-        utils.number.getReceived.invalidate();
+        utils.number.getReceivedInfinite.invalidate();
         utils.wallet.balance.invalidate();
         utils.wallet.transactions.invalidate();
 

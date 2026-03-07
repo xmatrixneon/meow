@@ -29,13 +29,16 @@ type SmsEntry = {
   receivedAt: string;
 };
 
-type RefundReason = 'expired' | 'provider_cancelled';
+// FIX: added 'buy_failed' reason for ghost PENDING cleanup — distinct from
+// 'provider_cancelled' which means the provider explicitly cancelled an active order.
+type RefundReason = 'expired' | 'provider_cancelled' | 'buy_failed';
 
 type RefundPayload = {
   id: string;
   price: Prisma.Decimal;
   orderId: string;
   serviceId: string;
+  phoneNumber?: string;
 };
 
 /* ──────────────────────────────────────────────────────────────── */
@@ -90,6 +93,9 @@ async function appendSmsContent(numberId: string, newSms: string): Promise<boole
  * Auto-refund when number expires without SMS or provider cancels.
  * Uses updateMany + balanceDeducted=true guard to prevent double refunds.
  * If wallet is missing, still closes the number so it doesn't get re-processed.
+ *
+ * FIX: sets refundOrderId for DB-level dedup (unique constraint in schema).
+ * FIX: accepts optional phoneNumber for proper transaction records.
  */
 async function handleAutoRefund(
   activeNumber: RefundPayload,
@@ -97,7 +103,6 @@ async function handleAutoRefund(
   reason: RefundReason,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    // FIX (stubs Bug 3): read wallet first — if missing, still close the number
     const wallet = await tx.wallet.findUnique({ where: { userId } });
 
     const service = await tx.service.findUnique({
@@ -117,7 +122,6 @@ async function handleAutoRefund(
     if (updated.count === 0) return; // Already refunded by another process
 
     if (!wallet) {
-      // Number is now closed but we can't refund — log for manual recovery
       console.error(
         `[refund] Wallet not found for userId=${userId}, orderId=${activeNumber.orderId} — number closed but balance NOT refunded`,
       );
@@ -133,16 +137,22 @@ async function handleAutoRefund(
       },
     });
 
+    const description = (() => {
+      if (reason === 'expired') return 'Auto-refund: Number expired without SMS';
+      if (reason === 'buy_failed') return 'Auto-refund: Purchase failed before number was assigned';
+      return 'Auto-refund: Provider cancelled order';
+    })();
+
     await tx.transaction.create({
       data: {
         walletId: wallet.id,
         type: 'REFUND',
         amount: activeNumber.price,
         status: 'COMPLETED',
-        description:
-          reason === 'expired'
-            ? 'Auto-refund: Number expired without SMS'
-            : 'Auto-refund: Provider cancelled order',
+        // FIX: refundOrderId gives DB-level dedup guarantee (unique constraint in schema)
+        refundOrderId: activeNumber.orderId,
+        description,
+        ...(activeNumber.phoneNumber && { phoneNumber: activeNumber.phoneNumber }),
         metadata: {
           orderId: activeNumber.orderId,
           reason,
@@ -160,7 +170,9 @@ async function handleAutoRefund(
 
 async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumbers>>[number]): Promise<void> {
   try {
-    // FIX (Bug 11 cross-file): ghost PENDING records from failed buy transactions
+    // Ghost PENDING records: buy transaction crashed before provider responded.
+    // FIX: use reason='buy_failed' instead of 'provider_cancelled' — the provider
+    // was never successfully reached, so this is a different failure mode.
     if (number.numberId === 'PENDING' || number.phoneNumber === 'PENDING') {
       const age = Date.now() - number.createdAt.getTime();
       if (age > PENDING_GHOST_TTL_MS) {
@@ -175,7 +187,7 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
             serviceId: number.serviceId,
           },
           number.userId,
-          'provider_cancelled',
+          'buy_failed',
         );
       }
       return;
@@ -185,7 +197,8 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
 
     if (number.expiresAt && number.expiresAt.getTime() < Date.now()) {
       if (number.smsContent) {
-        // SMS already received — just close, no refund
+        // SMS already received — close and call finishOrder to tell provider we're done.
+        // FIX: finishOrder was previously never called — provider never knew we were done.
         await prisma.activeNumber.updateMany({
           where: { id: number.id, activeStatus: ActiveStatus.ACTIVE },
           data: {
@@ -193,6 +206,15 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
             status: NumberStatus.COMPLETED,
           },
         });
+
+        const otpClientForFinish = new OtpProviderClient({
+          apiUrl: number.service.server.api.apiUrl,
+          apiKey: number.service.server.api.apiKey,
+        });
+        await otpClientForFinish.finishOrder(number.numberId).catch((err) => {
+          console.warn(`[expired+sms] finishOrder failed for ${number.numberId}:`, err);
+        });
+
         console.log(`[expired+sms] orderId=${number.orderId} closed`);
       } else {
         await handleAutoRefund(
@@ -201,6 +223,7 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
             price: number.price,
             orderId: number.orderId,
             serviceId: number.serviceId,
+            phoneNumber: number.phoneNumber,
           },
           number.userId,
           'expired',
@@ -223,11 +246,17 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
       const nextCheck = await otpClient.getNextSms(number.numberId);
 
       if (!nextCheck.success || !nextCheck.hasMore) {
-        // FIX (Bug 4): no more SMS — close the number so it's not polled forever
+        // No more SMS — close the number and call finishOrder.
+        // FIX: finishOrder was previously never called here either.
         await prisma.activeNumber.updateMany({
           where: { id: number.id, activeStatus: ActiveStatus.ACTIVE },
           data: { activeStatus: ActiveStatus.CLOSED },
         });
+
+        await otpClient.finishOrder(number.numberId).catch((err) => {
+          console.warn(`[multi-sms] finishOrder failed for ${number.numberId}:`, err);
+        });
+
         console.log(`[multi-sms] orderId=${number.orderId} no more SMS, closed`);
         return;
       }
@@ -237,8 +266,6 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
       if (additionalStatus.status === 'RECEIVED' && additionalStatus.sms) {
         const added = await appendSmsContent(number.id, additionalStatus.sms);
         if (added) {
-          // FIX (Bug 3 + Bug 10): do NOT call finishOrder here — keep number open
-          // for further SMS. finishOrder is only called when closing the number.
           console.log(`[sms+] orderId=${number.orderId} additional SMS saved`);
         }
       }
@@ -248,7 +275,6 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
     /* ───── First SMS — poll provider ───── */
 
     const statusResponse = await otpClient.getStatus(number.numberId);
-    // getStatus no longer throws (fixed in client.ts Bug 6) — always returns safely
 
     /* ── SMS received ── */
 
@@ -265,10 +291,8 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
           },
         });
 
-        // FIX (Bug 3 + Bug 10): do NOT call finishOrder immediately.
-        // finishOrder tells the provider we are done — but the number stays
-        // ACTIVE for multi-SMS until expiry closes it.
-        // finishOrder is called when we close the number (expiry or no more SMS).
+        // Do NOT call finishOrder here — number stays ACTIVE for multi-SMS.
+        // finishOrder is called when we close the number (expiry or no more SMS above).
         console.log(`[sms] orderId=${number.orderId} first SMS saved`);
       }
       return;
@@ -283,6 +307,7 @@ async function processNumber(number: Awaited<ReturnType<typeof fetchActiveNumber
           price: number.price,
           orderId: number.orderId,
           serviceId: number.serviceId,
+          phoneNumber: number.phoneNumber,
         },
         number.userId,
         'provider_cancelled',
@@ -322,15 +347,15 @@ async function pollActiveNumbers(): Promise<void> {
   const numbers = await fetchActiveNumbers();
   if (!numbers.length) return;
 
-  // FIX (Bug 2): process all numbers in parallel — dramatically faster
-  // Promise.allSettled so one failure doesn't abort the rest
+  // Process all numbers in parallel — Promise.allSettled so one failure
+  // doesn't abort the rest.
   await Promise.allSettled(numbers.map((n) => processNumber(n as any)));
 }
 
 async function run(): Promise<void> {
   console.log(`[otp-poller] started — interval=${POLL_INTERVAL}ms`);
 
-  // FIX (Bug 1): concurrency guard — prevents overlapping poll cycles
+  // Concurrency guard — prevents overlapping poll cycles
   let isPolling = false;
 
   async function tick(): Promise<void> {
@@ -346,7 +371,7 @@ async function run(): Promise<void> {
     }
   }
 
-  // FIX (Bug 5): clean shutdown — disconnect both prisma AND pg pool
+  // Clean shutdown — disconnect both prisma AND pg pool
   async function shutdown(signal: string): Promise<void> {
     console.log(`[otp-poller] shutting down (${signal})`);
     clearInterval(intervalHandle);
@@ -358,8 +383,6 @@ async function run(): Promise<void> {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-  // Use setInterval so the gap between polls is consistent regardless of
-  // how long the poll takes (combined with the isPolling guard above)
   const intervalHandle = setInterval(tick, POLL_INTERVAL);
 
   // Run immediately on startup

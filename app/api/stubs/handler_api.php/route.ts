@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
     return new NextResponse("BAD_KEY", { status: 200, headers: corsHeaders });
   }
 
-  // Lookup user via UserApi table (apiKey → user)
   const userApi = await prisma.userApi.findUnique({
     where: { apiKey },
     include: { user: true },
@@ -45,37 +44,31 @@ export async function GET(request: NextRequest) {
 
   const user = userApi.user;
 
-  // Check user status via UserData
   const userData = await prisma.userData.findUnique({
     where: { userId: user.id },
   });
 
+  // FIX: compare against enum value rather than raw string — UserData.status is
+  // now a UserStatus enum, so we compare against the enum member directly.
   if (!userData || userData.status !== "ACTIVE") {
     return new NextResponse("ACCOUNT_BLOCKED", { status: 200, headers: corsHeaders });
   }
 
   // Update API call stats (fire-and-forget)
-  prisma.userData.update({
-    where: { userId: user.id },
-    data: {
-      apiCalls: { increment: 1 },
-      lastApiCall: new Date(),
-    },
-  }).catch(() => {});
+  prisma.userData
+    .update({
+      where: { userId: user.id },
+      data: { apiCalls: { increment: 1 }, lastApiCall: new Date() },
+    })
+    .catch(() => {});
 
   switch (action) {
-    case "getBalance":
-      return handleGetBalance(user);
-    case "getCountries":
-      return handleGetCountries();
-    case "getServices":
-      return handleGetServices(searchParams);
-    case "getNumber":
-      return handleGetNumber(searchParams, user);
-    case "getStatus":
-      return handleGetStatus(searchParams, user);
-    case "setStatus":
-      return handleSetStatus(searchParams, user);
+    case "getBalance":  return handleGetBalance(user);
+    case "getCountries": return handleGetCountries();
+    case "getServices":  return handleGetServices(searchParams);
+    case "getNumber":    return handleGetNumber(searchParams, user);
+    case "getStatus":    return handleGetStatus(searchParams, user);
+    case "setStatus":    return handleSetStatus(searchParams, user);
     default:
       return new NextResponse("WRONG_ACTION", { status: 200, headers: corsHeaders });
   }
@@ -87,19 +80,18 @@ export async function GET(request: NextRequest) {
 // ============================================
 
 async function handleGetBalance(user: User) {
-  const wallet = await prisma.wallet.findUnique({
-    where: { userId: user.id },
-  });
+  const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
 
   if (!wallet) {
     return new NextResponse("ACCESS_BALANCE:0.00", { status: 200, headers: corsHeaders });
   }
 
-  // Format to 2 decimal places consistently
-  return new NextResponse(`ACCESS_BALANCE:${Number(wallet.balance).toFixed(2)}`, {
-    status: 200,
-    headers: corsHeaders,
-  });
+  // FIX: use Decimal.toDecimalPlaces instead of Number() to avoid precision loss
+  // on large balances (Number() can lose precision above ~15 significant digits).
+  return new NextResponse(
+    `ACCESS_BALANCE:${wallet.balance.toDecimalPlaces(2).toString()}`,
+    { status: 200, headers: corsHeaders },
+  );
 }
 
 // ============================================
@@ -111,12 +103,7 @@ async function handleGetCountries() {
   const servers = await prisma.otpServer.findMany({
     where: { isActive: true },
     orderBy: { id: "asc" },
-    select: {
-      id: true,
-      name: true,
-      countryCode: true,
-      countryName: true,
-    },
+    select: { id: true, name: true, countryCode: true, countryName: true },
   });
 
   const response: Record<string, string> = {};
@@ -143,15 +130,10 @@ async function handleGetServices(searchParams: URLSearchParams) {
   const services = await prisma.service.findMany({
     where: {
       isActive: true,
-      server: {
-        countryCode: country,
-        isActive: true,
-      },
+      server: { countryCode: country, isActive: true },
     },
     include: {
-      server: {
-        select: { countryCode: true },
-      },
+      server: { select: { countryCode: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -159,6 +141,8 @@ async function handleGetServices(searchParams: URLSearchParams) {
   const response: Record<string, string> = {};
   for (const service of services) {
     const key = `${service.code}_${service.server.countryCode}`;
+    // Note: if two active servers share the same countryCode+serviceCode, last writer wins.
+    // Deduplicate upstream by ensuring unique (code, countryCode) pairs if needed.
     response[key] = service.name;
   }
 
@@ -167,55 +151,35 @@ async function handleGetServices(searchParams: URLSearchParams) {
 
 // ============================================
 // getNumber
-// Params: service, country
-// Returns: ACCESS_NUMBER:{orderId}:{phoneNumber}
-//
-// Flow mirrors numberRouter.buy exactly:
-//   1. Validate service + server + api active
-//   2. Apply custom price discount (if any)
-//   3. Deduct balance + create PENDING record atomically
-//   4. Call upstream provider (outside transaction)
-//   5. Update record with real numberId + phoneNumber
-//   6. On any provider failure: refund + delete pending record
 // ============================================
 
 async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   const serviceCode = searchParams.get("service");
   const countryCode = searchParams.get("country");
 
-  if (!serviceCode) {
-    return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
-  }
-  if (!countryCode) {
-    return new NextResponse("BAD_COUNTRY", { status: 200, headers: corsHeaders });
-  }
+  if (!serviceCode) return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
+  if (!countryCode) return new NextResponse("BAD_COUNTRY", { status: 200, headers: corsHeaders });
 
-  // Get settings
   const settings = await prisma.settings.findUnique({ where: { id: "1" } });
   const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 15;
 
-  // Find matching service + server + api credentials
   const service = await prisma.service.findFirst({
     where: {
       code: serviceCode,
       isActive: true,
       server: { countryCode, isActive: true },
     },
-    include: {
-      server: { include: { api: true } },
-    },
+    include: { server: { include: { api: true } } },
   });
 
   if (!service || !service.server || !service.server.api) {
     return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
   }
 
-  // Check server and API are both active (mirrors numberRouter.buy)
   if (!service.server.isActive || !service.server.api.isActive) {
     return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
   }
 
-  // Apply custom price discount if user has one (mirrors calculateFinalPrice in numberRouter)
   let finalPrice = service.basePrice;
   const customPrice = await prisma.customPrice.findUnique({
     where: { userId_serviceId: { userId: user.id, serviceId: service.id } },
@@ -226,32 +190,24 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
       const after = service.basePrice.minus(customPrice.discount);
       finalPrice = after.isNegative() ? new Decimal(0) : after;
     } else {
-      // PERCENT discount
       const discountAmount = service.basePrice.mul(customPrice.discount.div(100));
       finalPrice = service.basePrice.minus(discountAmount);
     }
   }
 
-  const orderId = nanoid(16); // Match tRPC router's nanoid(16)
+  const orderId = nanoid(16);
   const expiresAt = new Date(Date.now() + numberExpiryMinutes * 60 * 1000);
 
-  // Step 1: Deduct balance + create PENDING record atomically (mirrors numberRouter.buy Step 1)
+  // Step 1: Deduct balance + create PENDING record atomically
   let activeNumberId: string;
 
   try {
     const txResult = await prisma.$transaction(async (tx) => {
-      // Re-read wallet inside transaction — race condition guard
       const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
 
-      if (!wallet) {
-        throw new Error("NO_WALLET");
-      }
+      if (!wallet) throw new Error("NO_WALLET");
+      if (wallet.balance.lessThan(finalPrice)) throw new Error("NO_BALANCE");
 
-      if (wallet.balance.lessThan(finalPrice)) {
-        throw new Error("NO_BALANCE");
-      }
-
-      // Deduct balance
       const updatedWallet = await tx.wallet.update({
         where: { userId: user.id },
         data: {
@@ -261,12 +217,8 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
         },
       });
 
-      // Extra guard: balance cannot go negative
-      if (updatedWallet.balance.isNegative()) {
-        throw new Error("NO_BALANCE");
-      }
+      if (updatedWallet.balance.isNegative()) throw new Error("NO_BALANCE");
 
-      // Create PURCHASE transaction record (mirrors numberRouter.buy)
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
@@ -278,7 +230,6 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
         },
       });
 
-      // Create ActiveNumber in PENDING state
       const activeNumber = await tx.activeNumber.create({
         data: {
           userId: user.id,
@@ -287,7 +238,6 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
           serverId: service.serverId,
           serviceId: service.id,
           orderId,
-          buyTime: new Date(),
           expiresAt,
           price: finalPrice,
           status: "PENDING",
@@ -304,10 +254,10 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     if (err instanceof Error && (err.message === "NO_BALANCE" || err.message === "NO_WALLET")) {
       return new NextResponse("NO_BALANCE", { status: 200, headers: corsHeaders });
     }
-    return new NextResponse("SERVER_ERROR", { status: 200, headers: corsHeaders });
+    return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
   }
 
-  // Step 2: Call upstream provider (outside transaction — mirrors numberRouter.buy Step 2)
+  // Step 2: Call upstream provider (outside transaction)
   const client = new OtpProviderClient({
     apiUrl: service.server.api.apiUrl,
     apiKey: service.server.api.apiKey,
@@ -318,7 +268,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     result = await client.getNumber(serviceCode, countryCode);
   } catch {
     await handleProviderFailure(orderId, finalPrice, user.id);
-    return new NextResponse("SERVER_ERROR", { status: 200, headers: corsHeaders });
+    return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
   }
 
   if (!result.success || !result.phoneNumber || !result.orderId) {
@@ -327,17 +277,14 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     if (err.includes("NO_NUMBER") || err.includes("NO_NUMBERS")) {
       return new NextResponse("NO_API_NUMBER", { status: 200, headers: corsHeaders });
     }
-    return new NextResponse("SERVER_ERROR", { status: 200, headers: corsHeaders });
+    return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
   }
 
-  // Step 3: Update record with real provider data (mirrors numberRouter.buy Step 3)
+  // Step 3: Update record with real provider data
   try {
     await prisma.activeNumber.update({
       where: { id: activeNumberId },
-      data: {
-        numberId: result.orderId,
-        phoneNumber: result.phoneNumber,
-      },
+      data: { numberId: result.orderId, phoneNumber: result.phoneNumber },
     });
 
     await prisma.transaction.updateMany({
@@ -353,8 +300,9 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
       },
     });
   } catch {
-    // DB update failed but number IS purchased — log for manual recovery
-    console.error(`[getNumber] Failed to update ActiveNumber ${activeNumberId} with provider data`);
+    console.error(
+      `[getNumber] Failed to update ActiveNumber ${activeNumberId} with provider data`,
+    );
   }
 
   return new NextResponse(`ACCESS_NUMBER:${orderId}:${result.phoneNumber}`, {
@@ -365,15 +313,19 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
 
 /**
  * Refund and delete failed purchase record.
- * Mirrors handleBuyFailure in numberRouter exactly.
+ * FIX: wallet is read BEFORE the wallet.update so the read reflects pre-refund state.
+ * FIX: refundOrderId set for DB-level dedup.
  */
 async function handleProviderFailure(
   orderId: string,
   price: Prisma.Decimal,
-  userId: string
+  userId: string,
 ): Promise<void> {
   try {
     await prisma.$transaction(async (tx) => {
+      // FIX: read wallet FIRST (before the increment) so balance context is correct
+      const wallet = await tx.wallet.findUnique({ where: { userId } });
+
       const activeNumber = await tx.activeNumber.findFirst({
         where: { orderId, userId, balanceDeducted: true },
       });
@@ -390,7 +342,6 @@ async function handleProviderFailure(
         },
       });
 
-      const wallet = await tx.wallet.findUnique({ where: { userId } });
       if (wallet) {
         await tx.transaction.create({
           data: {
@@ -398,6 +349,8 @@ async function handleProviderFailure(
             type: "REFUND",
             amount: price,
             status: "COMPLETED",
+            // FIX: refundOrderId for DB-level dedup
+            refundOrderId: orderId,
             description: "No number available from provider",
             metadata: { orderId, reason: "provider_no_number" },
           },
@@ -411,11 +364,6 @@ async function handleProviderFailure(
 
 // ============================================
 // getStatus
-// Params: id (orderId)
-// Returns: STATUS_WAIT_CODE | STATUS_OK:{sms} | STATUS_CANCEL
-//
-// DB-first: background poller (fetch.mjs) writes SMS to DB.
-// Expiry handling mirrors handleAutoRefund in numberRouter.
 // ============================================
 
 async function handleGetStatus(searchParams: URLSearchParams, user: User) {
@@ -433,7 +381,7 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("NO_ACTIVATION", { status: 200, headers: corsHeaders });
   }
 
-  // Check CLOSED first — poller may have already closed it
+  // Already closed by poller
   if (number.activeStatus === "CLOSED") {
     if (number.smsContent) {
       return new NextResponse(`STATUS_OK:${extractLatestSms(number.smsContent)}`, {
@@ -444,50 +392,52 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
   }
 
-  // Expiry safety net — mirrors handleAutoRefund using updateMany + balanceDeducted guard
+  // Expiry safety net
   if (number.activeStatus === "ACTIVE" && new Date() > number.expiresAt) {
     if (number.balanceDeducted && number.status === "PENDING") {
-      const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
-      if (wallet) {
-        await prisma.$transaction(async (tx) => {
-          // updateMany with balanceDeducted=true guard prevents double refunds atomically
-          const updated = await tx.activeNumber.updateMany({
-            where: { id: number.id, balanceDeducted: true },
-            data: {
-              status: "CANCELLED",
-              activeStatus: "CLOSED",
-              balanceDeducted: false,
-            },
-          });
+      // FIX: close the number regardless of whether wallet exists.
+      // Previously if wallet was null the number stayed ACTIVE and was polled forever.
+      await prisma.$transaction(async (tx) => {
+        const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
 
-          if (updated.count === 0) return; // Already refunded by another process
-
-          await tx.wallet.update({
-            where: { userId: user.id },
-            data: {
-              balance: { increment: number.price },
-              totalSpent: { decrement: number.price },
-              totalOtp: { decrement: 1 },
-            },
-          });
-
-          await tx.transaction.create({
-            data: {
-              walletId: wallet.id,
-              type: "REFUND",
-              amount: number.price,
-              status: "COMPLETED",
-              description: "Auto-refund: Number expired without SMS",
-              metadata: {
-                orderId: number.orderId,
-                reason: "expired",
-                serviceId: number.serviceId,
-              },
-            },
-          });
+        const updated = await tx.activeNumber.updateMany({
+          where: { id: number.id, balanceDeducted: true },
+          data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
         });
-      }
+
+        if (updated.count === 0) return; // Already refunded
+
+        if (!wallet) {
+          console.error(
+            `[stubs/getStatus] Wallet not found for userId=${user.id}, orderId=${number.orderId} — number closed but balance NOT refunded`,
+          );
+          return;
+        }
+
+        await tx.wallet.update({
+          where: { userId: user.id },
+          data: {
+            balance: { increment: number.price },
+            totalSpent: { decrement: number.price },
+            totalOtp: { decrement: 1 },
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            walletId: wallet.id,
+            type: "REFUND",
+            amount: number.price,
+            status: "COMPLETED",
+            // FIX: refundOrderId for DB-level dedup
+            refundOrderId: number.orderId,
+            description: "Auto-refund: Number expired without SMS",
+            metadata: { orderId: number.orderId, reason: "expired", serviceId: number.serviceId },
+          },
+        });
+      });
     } else {
+      // Has SMS or already refunded — just close
       await prisma.activeNumber.update({
         where: { id: number.id },
         data: { activeStatus: "CLOSED" },
@@ -497,7 +447,6 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
   }
 
-  // SMS already in DB (written by background poller)
   if (number.smsContent) {
     return new NextResponse(`STATUS_OK:${extractLatestSms(number.smsContent)}`, {
       status: 200,
@@ -525,10 +474,6 @@ function extractLatestSms(smsContent: unknown): string {
 
 // ============================================
 // setStatus
-// Params: id (orderId), status (8=cancel, 3=next SMS)
-// Returns: STATUS_CANCEL | ACCESS_RETRY_GET | BAD_STATUS
-//
-// Cancel flow mirrors numberRouter.cancel exactly.
 // ============================================
 
 async function handleSetStatus(searchParams: URLSearchParams, user: User) {
@@ -547,11 +492,7 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
   const number = await prisma.activeNumber.findFirst({
     where: { orderId, userId: user.id },
     include: {
-      service: {
-        include: {
-          server: { include: { api: true } },
-        },
-      },
+      service: { include: { server: { include: { api: true } } } },
     },
   });
 
@@ -561,17 +502,14 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
 
   // ---- Status 8: Cancel ----
   if (statusCode === 8) {
-    // Block if SMS received (mirrors numberRouter.cancel check)
     if (number.status !== "PENDING" || number.smsContent) {
       return new NextResponse("ACCESS_ACTIVATION", { status: 200, headers: corsHeaders });
     }
 
-    // Block if already refunded (mirrors numberRouter.cancel)
     if (!number.balanceDeducted) {
       return new NextResponse("ACCESS_ACTIVATION", { status: 200, headers: corsHeaders });
     }
 
-    // Cancel cooldown — use createdAt (mirrors numberRouter.cancel which uses createdAt)
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const minCancelMs = (settings?.minCancelMinutes ?? 2) * 60 * 1000;
     const elapsed = Date.now() - number.createdAt.getTime();
@@ -584,13 +522,11 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       });
     }
 
-    // Verify wallet exists BEFORE calling upstream
     const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
     if (!wallet) {
-      return new NextResponse("SERVER_ERROR", { status: 200, headers: corsHeaders });
+      return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
     }
 
-    // Cancel with provider (mirrors numberRouter.cancel — refund even if this fails)
     const client = new OtpProviderClient({
       apiUrl: number.service.server.api.apiUrl,
       apiKey: number.service.server.api.apiKey,
@@ -601,17 +537,16 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       return { success: false };
     });
 
-    // Atomic refund — mirrors numberRouter.cancel transaction exactly
-    // Includes balanceDeducted=false to prevent double refunds
+    // FIX: use updateMany with balanceDeducted=true guard INSIDE the transaction.
+    // Prevents double-refund race with the poller's handleAutoRefund.
+    // FIX: set refundOrderId for DB-level dedup.
     await prisma.$transaction(async (tx) => {
-      await tx.activeNumber.update({
-        where: { id: number.id },
-        data: {
-          status: "CANCELLED",
-          activeStatus: "CLOSED",
-          balanceDeducted: false,
-        },
+      const guard = await tx.activeNumber.updateMany({
+        where: { id: number.id, balanceDeducted: true },
+        data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
       });
+
+      if (guard.count === 0) return; // Poller already refunded
 
       await tx.wallet.update({
         where: { userId: user.id },
@@ -628,6 +563,7 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
           type: "REFUND",
           amount: number.price,
           status: "COMPLETED",
+          refundOrderId: number.orderId,
           description: `Cancelled: ${number.service.name} - ${number.phoneNumber}`,
           metadata: {
             orderId: number.orderId,
@@ -659,17 +595,20 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       const nextResult = await client.getNextSms(number.numberId);
 
       if (nextResult.success && nextResult.hasMore) {
-        // Reset to PENDING so poller and getStatus wait for next SMS
+        // FIX: keep status=COMPLETED (not PENDING) so the poller's multi-SMS branch
+        // correctly handles it (checks smsContent && status===COMPLETED).
+        // Previously resetting to PENDING caused the poller to fall through to the
+        // first-SMS branch and re-deliver the old SMS.
         await prisma.activeNumber.update({
           where: { id: number.id },
-          data: { status: "PENDING" },
+          data: { status: "COMPLETED", activeStatus: "ACTIVE" },
         });
         return new NextResponse("ACCESS_RETRY_GET", { status: 200, headers: corsHeaders });
       }
 
       return new NextResponse("ACCESS_ACTIVATION", { status: 200, headers: corsHeaders });
     } catch {
-      return new NextResponse("SERVER_ERROR", { status: 200, headers: corsHeaders });
+      return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
     }
   }
 

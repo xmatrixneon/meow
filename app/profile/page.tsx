@@ -487,7 +487,7 @@ export default function ProfilePage() {
               </p>
               <span className="w-px h-3 bg-border/60" />
               <p className="flex items-center gap-1">
-                Refreshed: {apiKeyData?.refreshCount ?? 0}/{apiKeyData?.limits?.weeklyLimit ?? 10} (weekly)
+                Refreshed: {(apiKeyData?.limits?.weeklyLimit ?? 10) - (apiKeyData?.weeklyRemaining ?? 0)}/{apiKeyData?.limits?.weeklyLimit ?? 10} (weekly)
               </p>
             </div>
             {apiKeyData?.cooldownRemaining && apiKeyData.cooldownRemaining > 0 && (

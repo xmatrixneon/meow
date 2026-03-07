@@ -23,9 +23,7 @@ export const walletRouter = createTRPCRouter({
   balance: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
 
-    let wallet = await prisma.wallet.findUnique({
-      where: { userId },
-    });
+    let wallet = await prisma.wallet.findUnique({ where: { userId } });
 
     if (!wallet) {
       wallet = await prisma.wallet.create({
@@ -62,9 +60,7 @@ export const walletRouter = createTRPCRouter({
       const userId = ctx.user.id;
       const { limit, offset, status } = input;
 
-      const wallet = await prisma.wallet.findUnique({
-        where: { userId },
-      });
+      const wallet = await prisma.wallet.findUnique({ where: { userId } });
 
       if (!wallet) {
         return {
@@ -91,17 +87,9 @@ export const walletRouter = createTRPCRouter({
         }),
       ]);
 
-      // Accurate statistics from actual data
       const [numberCount, numberCountWithSms, totalSpentFromNumbers, totalTopup] =
         await Promise.all([
-          // Total completed numbers (purchased)
-          prisma.activeNumber.count({
-            where: {
-              userId,
-              status: "COMPLETED",
-            },
-          }),
-          // Numbers with SMS received (actual used)
+          prisma.activeNumber.count({ where: { userId, status: "COMPLETED" } }),
           prisma.activeNumber.count({
             where: {
               userId,
@@ -109,22 +97,15 @@ export const walletRouter = createTRPCRouter({
               smsContent: { not: Prisma.DbNull },
             },
           }),
-          // Total spent on completed numbers
           prisma.activeNumber.aggregate({
-            where: {
-              userId,
-              status: "COMPLETED",
-            },
+            where: { userId, status: "COMPLETED" },
             _sum: { price: true },
           }),
-          // Total deposits + refunds
           prisma.transaction.aggregate({
             where: {
               walletId: wallet.id,
               status: "COMPLETED",
-              type: {
-                in: ["DEPOSIT", "REFUND"],
-              },
+              type: { in: ["DEPOSIT", "REFUND"] },
             },
             _sum: { amount: true },
           }),
@@ -155,14 +136,11 @@ export const walletRouter = createTRPCRouter({
     }),
 
   /**
-   * Deposit via UTR (Race-safe)
+   * Deposit via UTR (Race-safe).
+   * Duplicate UTR is caught by the unique constraint on Transaction.txnId (P2002).
    */
   deposit: protectedProcedure
-    .input(
-      z.object({
-        utr: z.string().trim().min(1).max(30),
-      })
-    )
+    .input(z.object({ utr: z.string().trim().min(1).max(30) }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       const { utr } = input;
@@ -194,47 +172,29 @@ export const walletRouter = createTRPCRouter({
         verifyResult = await bharatPeClient.verifyTransaction(utr);
       } catch (error) {
         if (error instanceof BharatPeError) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: error.message,
-          });
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
         }
         throw error;
       }
 
       if (!verifyResult.found) {
-        return {
-          success: false,
-          message: "Transaction not found.",
-        };
+        return { success: false, message: "Transaction not found." };
       }
 
       if (!verifyResult.canCredit) {
-        return {
-          success: false,
-          message: "Transaction cannot be credited.",
-        };
+        return { success: false, message: "Transaction cannot be credited." };
       }
 
       const amount = verifyResult.amount ?? 0;
-
       const minAmount = toNumber(settings.minRechargeAmount);
-      const maxAmount = toNumber(
-        new Decimal(settings.maxRechargeAmount ?? 5000)
-      );
+      const maxAmount = toNumber(new Decimal(settings.maxRechargeAmount ?? 5000));
 
       if (amount < minAmount) {
-        return {
-          success: false,
-          message: `Minimum recharge amount is ${minAmount}.`,
-        };
+        return { success: false, message: `Minimum recharge amount is ${minAmount}.` };
       }
 
       if (amount > maxAmount) {
-        return {
-          success: false,
-          message: `Maximum recharge amount is ${maxAmount}.`,
-        };
+        return { success: false, message: `Maximum recharge amount is ${maxAmount}.` };
       }
 
       // Validate payee
@@ -250,9 +210,7 @@ export const walletRouter = createTRPCRouter({
         }
       }
 
-      let wallet = await prisma.wallet.findUnique({
-        where: { userId },
-      });
+      let wallet = await prisma.wallet.findUnique({ where: { userId } });
 
       if (!wallet) {
         wallet = await prisma.wallet.create({
@@ -266,7 +224,8 @@ export const walletRouter = createTRPCRouter({
         });
       }
 
-      // RACE-SAFE ATOMIC TRANSACTION
+      // RACE-SAFE: txnId unique constraint on Transaction is the authoritative dedup guard.
+      // Two concurrent requests with the same UTR: one will get P2002, the other succeeds.
       try {
         await prisma.$transaction(async (tx) => {
           await tx.transaction.create({
@@ -275,8 +234,8 @@ export const walletRouter = createTRPCRouter({
               type: "DEPOSIT",
               amount: new Decimal(amount),
               status: "COMPLETED",
-              description: `Deposit via UPI`,
-              txnId: utr, // UNIQUE CONSTRAINT HERE
+              description: "Deposit via UPI",
+              txnId: utr,
               metadata: {
                 utr,
                 payerName: verifyResult.payerName,
@@ -315,7 +274,13 @@ export const walletRouter = createTRPCRouter({
     }),
 
   /**
-   * Redeem Promo (fixed totalRecharge bug)
+   * Redeem Promo.
+   *
+   * FIX: race condition — the pre-checks (existingUse, usedCount) are a fast-path
+   * UX convenience only. The authoritative dedup guard is the DB unique constraint
+   * on PromocodeHistory[promocodeId, userId], caught as P2002.
+   * Two simultaneous requests can both pass the pre-checks, but only one will
+   * succeed the transaction insert — the other gets P2002 → "already used" error.
    */
   redeemPromo: protectedProcedure
     .input(
@@ -327,43 +292,26 @@ export const walletRouter = createTRPCRouter({
       const userId = ctx.user.id;
       const { code } = input;
 
-      const promocode = await prisma.promocode.findUnique({
-        where: { code },
-      });
+      const promocode = await prisma.promocode.findUnique({ where: { code } });
 
       if (!promocode || !promocode.isActive) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Invalid or inactive promo code.",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or inactive promo code." });
       }
 
       if (promocode.usedCount >= promocode.maxUses) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Promo usage limit reached.",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Promo usage limit reached." });
       }
 
+      // Fast-path check (non-authoritative — race is handled below via P2002)
       const existingUse = await prisma.promocodeHistory.findUnique({
-        where: {
-          promocodeId_userId: {
-            promocodeId: promocode.id,
-            userId,
-          },
-        },
+        where: { promocodeId_userId: { promocodeId: promocode.id, userId } },
       });
 
       if (existingUse) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "You already used this promo code.",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You already used this promo code." });
       }
 
-      let wallet = await prisma.wallet.findUnique({
-        where: { userId },
-      });
+      let wallet = await prisma.wallet.findUnique({ where: { userId } });
 
       if (!wallet) {
         wallet = await prisma.wallet.create({
@@ -377,40 +325,53 @@ export const walletRouter = createTRPCRouter({
         });
       }
 
-      await prisma.$transaction(async (tx) => {
-        await tx.wallet.update({
-          where: { id: wallet!.id },
-          data: {
-            balance: { increment: promocode.amount },
-            // NOT incrementing totalRecharge (promo ≠ real deposit)
-          },
-        });
+      try {
+        await prisma.$transaction(async (tx) => {
+          // PromocodeHistory unique[promocodeId, userId] is the real race guard.
+          // This insert will throw P2002 if another request sneaks in concurrently.
+          await tx.promocodeHistory.create({
+            data: {
+              promocodeId: promocode.id,
+              userId,
+              amount: promocode.amount,
+            },
+          });
 
-        await tx.transaction.create({
-          data: {
-            walletId: wallet!.id,
-            type: "PROMO",
-            amount: promocode.amount,
-            status: "COMPLETED",
-            description: `Promo code: ${promocode.code}`,
-          },
-        });
+          await tx.wallet.update({
+            where: { id: wallet!.id },
+            data: {
+              balance: { increment: promocode.amount },
+              // NOT incrementing totalRecharge (promo ≠ real deposit)
+            },
+          });
 
-        await tx.promocode.update({
-          where: { id: promocode.id },
-          data: {
-            usedCount: { increment: 1 },
-          },
-        });
+          await tx.transaction.create({
+            data: {
+              walletId: wallet!.id,
+              type: "PROMO",
+              amount: promocode.amount,
+              status: "COMPLETED",
+              description: `Promo code: ${promocode.code}`,
+            },
+          });
 
-        await tx.promocodeHistory.create({
-          data: {
-            promocodeId: promocode.id,
-            userId,
-            amount: promocode.amount,
-          },
+          await tx.promocode.update({
+            where: { id: promocode.id },
+            data: { usedCount: { increment: 1 } },
+          });
         });
-      });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "You already used this promo code.",
+          });
+        }
+        throw error;
+      }
 
       return {
         success: true,

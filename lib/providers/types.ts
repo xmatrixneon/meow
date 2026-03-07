@@ -15,7 +15,7 @@ export interface GetNumberResponse {
 /**
  * Status values for SMS delivery
  */
-export type SmsStatus = 'WAITING' | 'RECEIVED' | 'CANCELLED';
+export type SmsStatus = "WAITING" | "RECEIVED" | "CANCELLED";
 
 /**
  * Response from getStatus API call
@@ -84,35 +84,35 @@ export enum SetStatusAction {
  * Known error codes from OTP provider APIs
  */
 export type OtpProviderErrorCode =
-  | 'BAD_KEY'
-  | 'ERROR_SQL'
-  | 'BAD_ACTION'
-  | 'BAD_SERVICE'
-  | 'BAD_COUNTRY'
-  | 'NO_NUMBER'
-  | 'BANNED'
-  | 'NO_NUMBERS'
-  | 'NO_BALANCE'
-  | 'WRONG_SERVICE'
-  | 'BAD_STATUS'
-  | 'ID_NOT_EXIST';
+  | "BAD_KEY"
+  | "ERROR_SQL"
+  | "BAD_ACTION"
+  | "BAD_SERVICE"
+  | "BAD_COUNTRY"
+  | "NO_NUMBER"
+  | "BANNED"
+  | "NO_NUMBERS"
+  | "NO_BALANCE"
+  | "WRONG_SERVICE"
+  | "BAD_STATUS"
+  | "ID_NOT_EXIST";
 
 /**
  * Error messages mapping for known error codes
  */
 export const OTP_ERROR_MESSAGES: Record<OtpProviderErrorCode, string> = {
-  BAD_KEY: 'Invalid API key',
-  ERROR_SQL: 'Server database error',
-  BAD_ACTION: 'Invalid action specified',
-  BAD_SERVICE: 'Invalid service specified',
-  BAD_COUNTRY: 'Invalid country code',
-  NO_NUMBER: 'No phone numbers available for this service/country',
-  BANNED: 'Account is banned',
-  NO_NUMBERS: 'No phone numbers available for this service/country',
-  NO_BALANCE: 'Insufficient balance',
-  WRONG_SERVICE: 'Service not available',
-  BAD_STATUS: 'Invalid status value',
-  ID_NOT_EXIST: 'Order ID does not exist',
+  BAD_KEY: "Invalid API key",
+  ERROR_SQL: "Server database error",
+  BAD_ACTION: "Invalid action specified",
+  BAD_SERVICE: "Invalid service specified",
+  BAD_COUNTRY: "Invalid country code",
+  NO_NUMBER: "No phone numbers available for this service/country",
+  BANNED: "Account is banned",
+  NO_NUMBERS: "No phone numbers available for this service/country",
+  NO_BALANCE: "Insufficient balance",
+  WRONG_SERVICE: "Service not available",
+  BAD_STATUS: "Invalid status value",
+  ID_NOT_EXIST: "Order ID does not exist",
 };
 
 /**
@@ -122,4 +122,5 @@ export interface OtpProviderConfig {
   apiUrl: string;
   apiKey: string;
   timeout?: number;
+  apiPath?: string;
 }
