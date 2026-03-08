@@ -5,8 +5,6 @@ import { createContext, useContext } from "react";
 import type { AuthState, AuthError } from "@/types/auth";
 import type { User } from "@/types/user";
 
-// ─── Context value ────────────────────────────────────────────────────────────
-
 export interface TelegramAuthContextValue extends AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -15,13 +13,8 @@ export interface TelegramAuthContextValue extends AuthState {
   signOut: () => Promise<void>;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-// null default so useTelegramAuth() can detect usage outside the provider.
-
 export const TelegramAuthContext =
   createContext<TelegramAuthContextValue | null>(null);
-
-// ─── Primary hook ─────────────────────────────────────────────────────────────
 
 export function useTelegramAuth(): TelegramAuthContextValue {
   const ctx = useContext(TelegramAuthContext);
@@ -32,8 +25,6 @@ export function useTelegramAuth(): TelegramAuthContextValue {
   }
   return ctx;
 }
-
-// ─── Convenience hooks ────────────────────────────────────────────────────────
 
 export function useUser(): User | null {
   return useTelegramAuth().user;
