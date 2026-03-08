@@ -1,141 +1,237 @@
 "use client";
+// components/telegram-gate.tsx
 
-import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
+import { useTelegramAuth } from "@/hooks/use-telegram-auth";
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME!;
+const LOGO = "https://i.ibb.co/kgBcLZsX/meow.png";
 
-function isTelegram(): boolean {
-  if (typeof window === "undefined") return true; // SSR — don't block
-  return !!(
-    window.Telegram?.WebApp?.initData ||
-    navigator.userAgent.includes("Telegram")
+interface TelegramGateProps {
+  children: ReactNode;
+}
+
+export function TelegramGate({ children }: TelegramGateProps) {
+  const { status, error, retry } = useTelegramAuth();
+
+  switch (status) {
+    case "loading":
+      return <LoadingScreen />;
+    case "unauthenticated":
+      return <OpenInTelegramScreen />;
+    case "error":
+      return <ErrorScreen message={error?.message} onRetry={retry} />;
+    case "authenticated":
+      return <>{children}</>;
+    default:
+      return <LoadingScreen />;
+  }
+}
+
+const DOT_COLORS = ["#ff6b00", "#ff9a3c", "#1e78ff"];
+
+function LoadingScreen() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#ffffff",
+        overflow: "hidden",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <motion.div
+        animate={{ scale: [0.94, 1.06, 0.94], opacity: [0.4, 0.8, 0.4] }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          position: "absolute",
+          width: 320,
+          height: 320,
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(255,107,0,0.14) 0%, rgba(30,120,255,0.08) 45%, transparent 70%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <motion.img
+        src={LOGO}
+        alt="MeowSMS"
+        draggable={false}
+        animate={{
+          y: [0, -18, -22, -12, 0],
+          scale: [1, 1.05, 1.07, 1.03, 1],
+        }}
+        transition={{
+          duration: 1.9,
+          repeat: Infinity,
+          ease: [0.36, 0.07, 0.19, 0.97],
+          times: [0, 0.3, 0.5, 0.7, 1],
+        }}
+        style={{
+          width: 148,
+          height: 148,
+          objectFit: "contain",
+          filter:
+            "drop-shadow(0 12px 28px rgba(255,107,0,0.30)) drop-shadow(0 4px 10px rgba(0,0,0,0.10))",
+          zIndex: 1,
+          userSelect: "none",
+        }}
+      />
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.5, ease: "easeOut" }}
+        style={{
+          marginTop: 16,
+          display: "flex",
+          alignItems: "baseline",
+          zIndex: 1,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 30,
+            fontWeight: 900,
+            letterSpacing: -0.5,
+            background: "linear-gradient(135deg, #ff6b00, #ff9a3c)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          Meow
+        </span>
+        <span
+          style={{
+            fontSize: 30,
+            fontWeight: 900,
+            letterSpacing: -0.5,
+            background: "linear-gradient(135deg, #1e78ff, #5ba4ff)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          SMS
+        </span>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35 }}
+        style={{ display: "flex", gap: 8, marginTop: 26, zIndex: 1 }}
+      >
+        {DOT_COLORS.map((color, i) => (
+          <motion.div
+            key={i}
+            animate={{ y: [0, -10, 0], opacity: [0.3, 1, 0.3] }}
+            transition={{
+              duration: 1.1,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.16,
+            }}
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: "50%",
+              background: color,
+            }}
+          />
+        ))}
+      </motion.div>
+
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5, duration: 0.6 }}
+        style={{
+          marginTop: 18,
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.10em",
+          textTransform: "uppercase",
+          color: "rgba(0,0,0,0.25)",
+          zIndex: 1,
+        }}
+      >
+        Loading your account…
+      </motion.p>
+    </div>
   );
 }
 
-export function TelegramGate({ children }: { children: React.ReactNode }) {
-  const [checked, setChecked] = useState(false);
-  const [isInTelegram, setIsInTelegram] = useState(true);
-
-  useEffect(() => {
-    setIsInTelegram(isTelegram());
-    setChecked(true);
-  }, []);
-
-  if (!checked) return null; // prevent flash
-
-  if (!isInTelegram) return <OpenInTelegramPage />;
-
-  return <>{children}</>;
+function OpenInTelegramScreen() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white p-6 text-center">
+      <motion.img
+        src={LOGO}
+        alt="MeowSMS"
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="w-24 h-24 object-contain"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
+        className="flex flex-col items-center gap-2"
+      >
+        <h1 className="text-xl font-semibold">Open in Telegram</h1>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          MeowSMS is a Telegram Mini App. Please open it through your bot link
+          inside Telegram.
+        </p>
+      </motion.div>
+    </div>
+  );
 }
 
-function OpenInTelegramPage() {
-  const telegramUrl = `https://t.me/${BOT_USERNAME}`;
-
+function ErrorScreen({
+  message,
+  onRetry,
+}: {
+  message?: string;
+  onRetry: () => void;
+}) {
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6 overflow-hidden relative">
-
-      {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px]" />
-        <div className="absolute bottom-0 left-1/4 w-[300px] h-[300px] rounded-full bg-blue-500/5 blur-[80px]" />
-        {/* Grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-            backgroundSize: "40px 40px",
-          }}
-        />
-      </div>
-
-      <div className="relative z-10 max-w-sm w-full flex flex-col items-center text-center gap-8">
-
-        {/* Logo */}
-        <motion.div
-          initial={{ scale: 0, rotate: -20 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
-          className="relative"
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white p-6 text-center">
+      <motion.img
+        src={LOGO}
+        alt="MeowSMS"
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="w-20 h-20 object-contain opacity-50"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
+        className="flex flex-col items-center gap-3"
+      >
+        <h1 className="text-xl font-semibold">Something went wrong</h1>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          {message ?? "An unexpected error occurred."}
+        </p>
+        <motion.button
+          whileTap={{ scale: 0.96 }}
+          whileHover={{ opacity: 0.88 }}
+          onClick={onRetry}
+          className="mt-1 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground"
         >
-          <div className="w-24 h-24 rounded-3xl overflow-hidden shadow-2xl shadow-primary/20 border border-white/10">
-            <img
-              src="https://i.ibb.co/VKDpWf0/meow.png"
-              alt="MeowSMS"
-              className="w-full h-full object-cover"
-            />
-          </div>
-          {/* Glow ring */}
-          <div className="absolute inset-0 rounded-3xl ring-1 ring-white/20 ring-offset-2 ring-offset-transparent" />
-        </motion.div>
-
-        {/* Text */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="space-y-3"
-        >
-          <h1 className="text-3xl font-bold text-white tracking-tight">
-            MeowSMS
-          </h1>
-          <p className="text-white/40 text-sm leading-relaxed max-w-[260px] mx-auto">
-            This app is only available inside Telegram. Open it through our bot to get started.
-          </p>
-        </motion.div>
-
-        {/* Features */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-          className="w-full grid grid-cols-3 gap-3"
-        >
-          {[
-            { emoji: "🔐", label: "Virtual Numbers" },
-            { emoji: "⚡", label: "Instant SMS" },
-            { emoji: "💰", label: "Pay Per Use" },
-          ].map((f) => (
-            <div
-              key={f.label}
-              className="flex flex-col items-center gap-2 px-2 py-3 rounded-2xl bg-white/5 border border-white/8"
-            >
-              <span className="text-xl">{f.emoji}</span>
-              <span className="text-[10px] text-white/50 font-medium leading-tight text-center">
-                {f.label}
-              </span>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* CTA Button */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.45 }}
-          className="w-full"
-        >
-          <a
-            href={telegramUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group relative w-full flex items-center justify-center gap-3 py-4 px-6 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm overflow-hidden transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/25"
-          >
-            {/* Shine effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-            {/* Telegram icon */}
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.31 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.838.942z" />
-            </svg>
-            Open in Telegram
-          </a>
-
-          <p className="mt-3 text-[11px] text-white/20">
-            Tap the button to open @{BOT_USERNAME}
-          </p>
-        </motion.div>
-
-      </div>
+          Try again
+        </motion.button>
+      </motion.div>
     </div>
   );
 }
