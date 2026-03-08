@@ -3,7 +3,7 @@ import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
-import BottomNavBar from "@/components/ui/bottom-nav-bar";
+import BottomNavBar from "@/components/bottom-nav-bar";
 import { TelegramAuthProvider } from "@/providers/telegram-auth-provider";
 import { TRPCProvider } from "@/lib/trpc";
 import { Toaster } from "@/components/ui/sonner";
