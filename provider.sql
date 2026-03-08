@@ -22,7 +22,7 @@ INSERT INTO "ApiCredential" (
 ) VALUES (
   'cattysms',
   'CattySMS',
-  'https://cattysms.com',            -- ← CHANGE THIS: CattySMS base API URL
+  'https://cattysms.shop',            -- ← CHANGE THIS: CattySMS base API URL
   'maya',           -- ← CHANGE THIS: your CattySMS API key
   true, NOW(), NOW()
 )
@@ -58,7 +58,7 @@ INSERT INTO "Service" (
 -- Messaging
 ('telegram',       'telegram',      'Telegram',         'india',  5.00, NULL, true, NOW(), NOW()),
 ('whatsapp',       'whatsapp',      'WhatsApp',          'india',  8.00, NULL, true, NOW(), NOW()),
-('signal',         'signal',        'Signal',            'india',  5.00, NULL, true, NOW(), NOW()),
+('airtel',         'airtel',        'Airtel',            'india',  2.00, NULL, true, NOW(), NOW()),
 
 -- Social
 ('instagram',      'instagram',     'Instagram',         'india',  2.00, NULL, true, NOW(), NOW()),
