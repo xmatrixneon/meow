@@ -845,60 +845,7 @@ export default function NumbersPage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 280, damping: 24 }}
-          className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-5"
-        >
-          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
-          <p className="relative text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 mb-4">
-            Temp Numbers
-          </p>
-          <div className="relative grid grid-cols-3 gap-2">
-            {[
-              {
-                icon: Clock,
-                color: "text-amber-400",
-                bg: "bg-amber-400/10",
-                value: counts.waiting,
-                label: "Waiting",
-              },
-              {
-                icon: CheckCheck,
-                color: "text-green-500",
-                bg: "bg-green-500/10",
-                value: counts.received,
-                label: "Received",
-              },
-              {
-                icon: Trash2,
-                color: "text-destructive",
-                bg: "bg-destructive/10",
-                value: counts.cancelled,
-                label: "Cancelled",
-              },
-            ].map(({ icon: Icon, color, bg, value, label }) => (
-              <div key={label} className="flex flex-col items-center gap-1.5">
-                <div
-                  className={cn(
-                    "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
-                    bg,
-                  )}
-                >
-                  <Icon size={15} className={color} />
-                </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                  {label}
-                </p>
-                <p className={cn("text-sm font-bold tabular-nums", color)}>
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+    
 
         {/* Tabs */}
         <motion.div

@@ -516,47 +516,7 @@ export default function MiniAppPage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-        {/* Hero greeting */}
-        <motion.div
-          {...fadeUp(0)}
-          className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-5"
-        >
-          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
-          <div className="relative flex items-center gap-3.5">
-            <div className="relative shrink-0">
-              {avatarUrl ? (
-                <Image
-                  src={avatarUrl}
-                  alt={displayName}
-                  width={56}
-                  height={56}
-                  className="w-14 h-14 rounded-xl object-cover border-2 border-primary/30"
-                  unoptimized
-                />
-              ) : (
-                <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-bold border-2 border-primary/30">
-                  {initials}
-                </div>
-              )}
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-card" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground">Welcome back</p>
-              <h1 className="text-lg font-bold text-foreground truncate">
-                {displayName}
-              </h1>
-            </div>
-            <div className="flex flex-col items-end gap-1 shrink-0">
-              <div className="flex items-center gap-1">
-                <Wallet size={11} className="text-green-500" />
-                <IndianRupee size={11} className="text-green-500" />
-                <span className="text-xs font-bold text-green-500">
-                  {Number(walletData?.balance ?? 0).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+    
 
         {/* Search */}
         <motion.div {...fadeUp(0.06)} className="relative">
