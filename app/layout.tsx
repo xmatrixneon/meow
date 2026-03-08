@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -28,8 +29,18 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/*
+         * IMPORTANT: Use the versioned URL from official Telegram docs.
+         * The ?60 query param pins a specific version — without it you get
+         * whatever the CDN serves which may be stale in some edge caches.
+         *
+         * strategy="beforeInteractive" ensures this runs before React hydrates,
+         * giving window.Telegram.WebApp the maximum time to be populated.
+         *
+         * Ref: https://core.telegram.org/bots/webapps#initializing-mini-apps
+         */}
         <Script
-          src="https://telegram.org/js/telegram-web-app.js"
+          src="https://telegram.org/js/telegram-web-app.js?60"
           strategy="beforeInteractive"
         />
       </head>

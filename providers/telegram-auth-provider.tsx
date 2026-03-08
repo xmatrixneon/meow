@@ -2,14 +2,16 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { init, retrieveRawInitData } from "@tma.js/sdk";
+import { init } from "@tma.js/sdk";
 import { authClient } from "@/lib/auth-client";
 import { TelegramAuthContext } from "@/hooks/use-telegram-auth";
 import type { TelegramAuthContextValue, AuthState, AuthError } from "@/types/auth";
 import type { User } from "@/types";
 
-// Initialize TMA.js SDK once
+// ─── SDK Init ────────────────────────────────────────────────────────────────
 let sdkInitialized = false;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getAuthError(code: AuthError["code"]): AuthError {
   const messages: Record<AuthError["code"], string> = {
@@ -21,25 +23,93 @@ function getAuthError(code: AuthError["code"]): AuthError {
   return { code, message: messages[code] };
 }
 
+/**
+ * Read initData directly from window.Telegram.WebApp.initData.
+ *
+ * WHY WE READ DIRECTLY INSTEAD OF USING retrieveRawInitData() FROM @tma.js/sdk:
+ *
+ * The SDK's retrieveRawInitData() re-parses the URL hash/search params looking
+ * for `tgWebAppData`. On first load this can return undefined because the hash
+ * injection races with React's useEffect.
+ *
+ * Per the official Telegram docs, window.Telegram.WebApp.initData is the
+ * canonical, already-parsed source of truth once telegram-web-app.js has run.
+ * Reading it directly is more reliable on cold opens.
+ *
+ * Ref: https://core.telegram.org/bots/webapps#initializing-mini-apps
+ */
+function getRawInitData(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.Telegram?.WebApp?.initData || null;
+}
+
+/**
+ * Tell Telegram the Mini App has finished loading.
+ *
+ * Per official docs, calling WebApp.ready() removes the native loading
+ * placeholder shown by the Telegram client while the app bootstraps.
+ * Must be called after the app is rendered and ready to show.
+ *
+ * Ref: https://core.telegram.org/bots/webapps#initializing-mini-apps
+ */
+function notifyTelegramReady(): void {
+  try {
+    window.Telegram?.WebApp?.ready();
+  } catch {
+    // Non-critical — safe to ignore outside Telegram context
+  }
+}
+
+/**
+ * Wait for window.Telegram.WebApp.initData to be populated.
+ *
+ * THE RACE CONDITION THIS FIXES:
+ * On a cold open, Telegram injects WebApp.initData by running
+ * telegram-web-app.js. Even with Next.js strategy="beforeInteractive",
+ * React's hydration and useEffect can fire while WebApp.initData is still
+ * an empty string "". On page refresh it works because the script already
+ * ran before React mounted — explaining the exact symptom reported.
+ *
+ * This polls for the value to become non-empty before proceeding with auth.
+ * Typically resolves in < 100ms. Times out after 3s for non-Telegram contexts.
+ */
+function waitForInitData(timeoutMs = 3000, intervalMs = 50): Promise<boolean> {
+  return new Promise((resolve) => {
+    // Fast path
+    if (getRawInitData()) {
+      resolve(true);
+      return;
+    }
+
+    const deadline = Date.now() + timeoutMs;
+
+    const timer = setInterval(() => {
+      if (getRawInitData()) {
+        clearInterval(timer);
+        resolve(true);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, intervalMs);
+  });
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export function TelegramAuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>("idle");
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState<AuthError | null>(null);
   const didAttempt = useRef(false);
 
-  // Initialize SDK once
-  useEffect(() => {
-    if (!sdkInitialized) {
-      init();
-      sdkInitialized = true;
-    }
-  }, []);
-
   const signIn = useCallback(async () => {
     setState("loading");
     setError(null);
 
-    const initData = retrieveRawInitData();
+    const initData = getRawInitData();
 
     if (!initData) {
       setState("unauthenticated");
@@ -56,14 +126,9 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      // result.data.user is correct per the better-auth-telegram docs
-      // (POST /telegram/miniapp/signin returns { user, session }).
-      // However the library doesn't expose this in its TS definitions —
-      // result.data is typed as {} — so we cast only this one extraction.
       const sessionUser = (result.data as { user?: User } | null)?.user;
 
       if (!sessionUser) {
-        // Sign-in succeeded but returned no user — treat as auth failure
         setState("error");
         setError(getAuthError("VALIDATION_FAILED"));
         return;
@@ -74,11 +139,10 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
     } catch (err) {
       setState("error");
       setError(getAuthError("NETWORK_ERROR"));
-      console.error("Auth error:", err);
+      console.error("[auth] Sign-in error:", err);
     }
   }, []);
 
-  // Check existing session on mount
   const checkSession = useCallback(async () => {
     setState("loading");
 
@@ -87,14 +151,11 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
       const sessionUser = session?.data?.user as User | undefined;
 
       if (sessionUser) {
-        // Verify session matches current Telegram user
-        const initData = retrieveRawInitData();
+        const initData = getRawInitData();
         if (initData) {
           const params = new URLSearchParams(initData);
           const userStr = params.get("user");
 
-          // FIX: wrap JSON.parse in try/catch — malformed initData would throw
-          // uncaught and leave the user stuck on the loading screen.
           let telegramId: string | null = null;
           try {
             telegramId = userStr ? JSON.parse(userStr)?.id?.toString() : null;
@@ -103,7 +164,6 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
           }
 
           if (telegramId && sessionUser.telegramId !== telegramId) {
-            // Session mismatch — sign out and re-auth
             await authClient.signOut();
             await signIn();
             return;
@@ -113,21 +173,50 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
         setUser(sessionUser);
         setState("authenticated");
       } else {
-        // No session — try to sign in
         await signIn();
       }
     } catch (err) {
       setState("error");
       setError(getAuthError("NETWORK_ERROR"));
-      console.error("Session check error:", err);
+      console.error("[auth] Session check error:", err);
     }
   }, [signIn]);
 
-  // Auto-auth on mount
+  // Auto-auth on mount — waits for WebApp to be ready before proceeding
   useEffect(() => {
     if (didAttempt.current) return;
     didAttempt.current = true;
-    checkSession();
+
+    (async () => {
+      // 1. Wait for Telegram to finish populating WebApp.initData.
+      //    Fixes the first-load race where initData is "" when React mounts.
+      const isReady = await waitForInitData();
+
+      if (!isReady) {
+        setState("unauthenticated");
+        setError(getAuthError("NO_INIT_DATA"));
+        return;
+      }
+
+      // 2. Init the TMA.js SDK now that WebApp is confirmed available.
+      //    Ordering matters: SDK init must come after initData is populated.
+      if (!sdkInitialized) {
+        try {
+          init();
+          sdkInitialized = true;
+        } catch (err) {
+          // Non-fatal: we read initData directly from WebApp, not via the SDK.
+          console.warn("[auth] TMA SDK init warning:", err);
+        }
+      }
+
+      // 3. Tell Telegram the app is ready — removes the loading placeholder.
+      //    Ref: https://core.telegram.org/bots/webapps#initializing-mini-apps
+      notifyTelegramReady();
+
+      // 4. Check for existing session or perform fresh sign-in.
+      await checkSession();
+    })();
   }, [checkSession]);
 
   const retry = useCallback(() => {
@@ -138,13 +227,10 @@ export function TelegramAuthProvider({ children }: { children: React.ReactNode }
     try {
       await authClient.signOut();
     } catch (err) {
-      console.error("Sign out error:", err);
+      console.error("[auth] Sign out error:", err);
     } finally {
       setUser(null);
       setState("unauthenticated");
-      // FIX: don't set SESSION_EXPIRED error on explicit sign out — it's not
-      // an error, it's intentional. Setting an error here would show an error
-      // message to the user after they deliberately signed out.
       setError(null);
     }
   }, []);
