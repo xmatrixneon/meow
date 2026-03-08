@@ -1,7 +1,5 @@
 // types/auth.ts
 
-// "idle" and "initializing" are gone — useRawInitData() from the SDK is
-// synchronous from URL hash, so there's no async wait state needed.
 export type AuthStatus =
   | "loading"
   | "authenticated"
@@ -9,10 +7,10 @@ export type AuthStatus =
   | "error";
 
 export type AuthErrorCode =
-  | "NO_INIT_DATA"       // not inside Telegram (useRawInitData returned undefined)
-  | "VALIDATION_FAILED"  // server rejected initData (bad HMAC / expired)
-  | "SESSION_EXPIRED"    // session cookie stale
-  | "NETWORK_ERROR";     // fetch threw
+  | "NO_INIT_DATA"
+  | "VALIDATION_FAILED"
+  | "SESSION_EXPIRED"
+  | "NETWORK_ERROR";
 
 export interface AuthError {
   code: AuthErrorCode;
@@ -22,10 +20,13 @@ export interface AuthError {
 export interface AuthState {
   status: AuthStatus;
   error: AuthError | null;
+  progress: number;        // 0–100
+  progressLabel: string;   // human-readable step label
 }
 
 export type AuthAction =
   | { type: "LOADING" }
   | { type: "AUTHENTICATED" }
   | { type: "UNAUTHENTICATED" }
-  | { type: "ERROR"; payload: AuthError };
+  | { type: "ERROR"; payload: AuthError }
+  | { type: "PROGRESS"; payload: { progress: number; label: string } };

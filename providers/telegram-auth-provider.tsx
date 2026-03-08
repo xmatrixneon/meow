@@ -1,17 +1,5 @@
 "use client";
 // providers/telegram-auth-provider.tsx
-//
-// LOADED VIA: providers/index.tsx → dynamic(..., { ssr: false })
-// Never import this file directly in layout.tsx or any server component.
-//
-// AUTH FLOW:
-//   1. useRawInitData() from SDK reads initData from URL hash — synchronous,
-//      always available when the component mounts. No polling, no race.
-//   2. If undefined → not inside Telegram → show "Open in Telegram" screen.
-//   3. If defined → check for existing session first (avoids sign-in round-trip).
-//   4. Session found + same telegramId → reuse it.
-//   5. Session found + different telegramId → sign out stale, sign in fresh.
-//   6. No session → sign in with initData.
 
 import {
   useEffect,
@@ -36,13 +24,11 @@ function bootSdk(): void {
   if (sdkBooted) return;
   sdkBooted = true;
   try {
-    // Dynamic import — avoids any SSR contamination even inside a "use client"
-    // file, since this runs inside useEffect (browser-only).
     import("@telegram-apps/sdk-react").then(({ init, miniApp }) => {
       init();
       if (miniApp.mountSync.isAvailable()) {
         miniApp.mountSync();
-        miniApp.ready(); // removes Telegram's native loading placeholder
+        miniApp.ready();
       }
     });
   } catch (err) {
@@ -52,24 +38,39 @@ function bootSdk(): void {
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
-const initialState: AuthState = { status: "loading", error: null };
+const initialState: AuthState = {
+  status: "loading",
+  error: null,
+  progress: 0,
+  progressLabel: "Starting up…",
+};
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
     case "LOADING":
-      return { status: "loading", error: null };
+      return { ...state, status: "loading", error: null };
+    case "PROGRESS":
+      return {
+        ...state,
+        progress: action.payload.progress,
+        progressLabel: action.payload.label,
+      };
     case "AUTHENTICATED":
-      return { status: "authenticated", error: null };
+      return {
+        ...state,
+        status: "authenticated",
+        error: null,
+        progress: 100,
+        progressLabel: "Done",
+      };
     case "UNAUTHENTICATED":
-      return { status: "unauthenticated", error: null };
+      return { ...state, status: "unauthenticated", error: null };
     case "ERROR":
-      return { status: "error", error: action.payload };
+      return { ...state, status: "error", error: action.payload };
     default:
       return state;
   }
 }
-
-// ─── User state ───────────────────────────────────────────────────────────────
 
 function useUserState(): [User | null, (u: User | null) => void] {
   return useReducer((_: User | null, next: User | null) => next, null);
@@ -82,16 +83,19 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useUserState();
   const didRun = useRef(false);
 
-  // useRawInitData reads from the URL hash params that Telegram embeds before
-  // the webview opens. It's synchronous — no waiting, no race condition.
-  // Returns undefined when not inside Telegram.
   const rawInitData = useRawInitData();
+
+  const progress = useCallback(
+    (value: number, label: string) =>
+      dispatch({ type: "PROGRESS", payload: { progress: value, label } }),
+    [],
+  );
 
   // ── signIn ──────────────────────────────────────────────────────────────
 
   const signIn = useCallback(
     async (initData: string): Promise<boolean> => {
-      dispatch({ type: "LOADING" });
+      progress(60, "Almost there…");
 
       try {
         const result = await authClient.signInWithMiniApp(initData);
@@ -100,6 +104,8 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
           dispatch({ type: "ERROR", payload: makeAuthError("VALIDATION_FAILED") });
           return false;
         }
+
+        progress(85, "Almost there…");
 
         const sessionUser = (result.data as { user?: User } | null)?.user ?? null;
 
@@ -116,16 +122,17 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [setUser],
+    [setUser, progress],
   );
 
   // ── checkSession ────────────────────────────────────────────────────────
 
   const checkSession = useCallback(
     async (initData: string): Promise<void> => {
-      dispatch({ type: "LOADING" });
+      progress(20, "Almost there…");
 
       try {
+        progress(40, "Almost there…");
         const session = await authClient.getSession();
         const sessionUser = session?.data?.user as User | undefined;
 
@@ -134,26 +141,24 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Guard against account switching — compare session telegramId with
-        // the one currently embedded in initData
+        progress(70, "Almost there…");
         const currentTelegramId = parseTelegramUserId(initData);
 
         if (currentTelegramId && sessionUser.telegramId !== currentTelegramId) {
-          // Different Telegram account — clear stale session and re-auth
+          progress(50, "Almost there…");
           await authClient.signOut();
           await signIn(initData);
           return;
         }
 
+        progress(90, "Almost there…");
         setUser(sessionUser);
         dispatch({ type: "AUTHENTICATED" });
       } catch {
-        // getSession threw (network blip) — fall through to fresh sign-in
-        // instead of landing in error state
         await signIn(initData);
       }
     },
-    [signIn, setUser],
+    [signIn, setUser, progress],
   );
 
   // ── signOut ─────────────────────────────────────────────────────────────
@@ -176,28 +181,20 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
   }, [rawInitData, signIn]);
 
   // ── Boot ────────────────────────────────────────────────────────────────
-  //
-  // Runs once when rawInitData first becomes available.
-  // useRawInitData() is synchronous so this fires on the first render — no
-  // polling, no setTimeout, no setInterval.
-  //
-  // StrictMode-safe: didRun ref prevents the double-invocation in dev mode.
 
   useEffect(() => {
     if (didRun.current) return;
 
-    // rawInitData is undefined when not inside Telegram
     if (rawInitData === undefined) {
       dispatch({ type: "UNAUTHENTICATED" });
       return;
     }
 
     didRun.current = true;
-
-    // Boot SDK and kick off auth
+    progress(10, "Starting up…");
     bootSdk();
     void checkSession(rawInitData);
-  }, [rawInitData, checkSession]);
+  }, [rawInitData, checkSession, progress]);
 
   // ── Context value ────────────────────────────────────────────────────────
 

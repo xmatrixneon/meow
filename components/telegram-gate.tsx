@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useTelegramAuth } from "@/hooks/use-telegram-auth";
+import { Progress } from "@/components/ui/progress";
 
 const LOGO = "https://i.ibb.co/kgBcLZsX/meow.png";
 
@@ -12,11 +13,11 @@ interface TelegramGateProps {
 }
 
 export function TelegramGate({ children }: TelegramGateProps) {
-  const { status, error, retry } = useTelegramAuth();
+  const { status, error, retry, progress, progressLabel } = useTelegramAuth();
 
   switch (status) {
     case "loading":
-      return <LoadingScreen />;
+      return <LoadingScreen progress={progress} label={progressLabel} />;
     case "unauthenticated":
       return <OpenInTelegramScreen />;
     case "error":
@@ -24,13 +25,19 @@ export function TelegramGate({ children }: TelegramGateProps) {
     case "authenticated":
       return <>{children}</>;
     default:
-      return <LoadingScreen />;
+      return <LoadingScreen progress={progress} label={progressLabel} />;
   }
 }
 
-const DOT_COLORS = ["#ff6b00", "#ff9a3c", "#1e78ff"];
+// ─── Loading Screen ───────────────────────────────────────────────────────────
 
-function LoadingScreen() {
+function LoadingScreen({
+  progress,
+  label,
+}: {
+  progress: number;
+  label: string;
+}) {
   return (
     <div
       style={{
@@ -45,6 +52,7 @@ function LoadingScreen() {
         fontFamily: "system-ui, sans-serif",
       }}
     >
+      {/* Ambient glow */}
       <motion.div
         animate={{ scale: [0.94, 1.06, 0.94], opacity: [0.4, 0.8, 0.4] }}
         transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
@@ -59,6 +67,7 @@ function LoadingScreen() {
         }}
       />
 
+      {/* Logo */}
       <motion.img
         src={LOGO}
         alt="MeowSMS"
@@ -74,8 +83,8 @@ function LoadingScreen() {
           times: [0, 0.3, 0.5, 0.7, 1],
         }}
         style={{
-          width: 148,
-          height: 148,
+          width: 120,
+          height: 120,
           objectFit: "contain",
           filter:
             "drop-shadow(0 12px 28px rgba(255,107,0,0.30)) drop-shadow(0 4px 10px rgba(0,0,0,0.10))",
@@ -84,12 +93,13 @@ function LoadingScreen() {
         }}
       />
 
+      {/* Brand wordmark */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, duration: 0.5, ease: "easeOut" }}
         style={{
-          marginTop: 16,
+          marginTop: 14,
           display: "flex",
           alignItems: "baseline",
           zIndex: 1,
@@ -97,7 +107,7 @@ function LoadingScreen() {
       >
         <span
           style={{
-            fontSize: 30,
+            fontSize: 28,
             fontWeight: 900,
             letterSpacing: -0.5,
             background: "linear-gradient(135deg, #ff6b00, #ff9a3c)",
@@ -110,7 +120,7 @@ function LoadingScreen() {
         </span>
         <span
           style={{
-            fontSize: 30,
+            fontSize: 28,
             fontWeight: 900,
             letterSpacing: -0.5,
             background: "linear-gradient(135deg, #1e78ff, #5ba4ff)",
@@ -123,51 +133,53 @@ function LoadingScreen() {
         </span>
       </motion.div>
 
+      {/* Progress bar + label */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.35 }}
-        style={{ display: "flex", gap: 8, marginTop: 26, zIndex: 1 }}
-      >
-        {DOT_COLORS.map((color, i) => (
-          <motion.div
-            key={i}
-            animate={{ y: [0, -10, 0], opacity: [0.3, 1, 0.3] }}
-            transition={{
-              duration: 1.1,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: i * 0.16,
-            }}
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              background: color,
-            }}
-          />
-        ))}
-      </motion.div>
-
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 0.6 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.4 }}
         style={{
-          marginTop: 18,
-          fontSize: 11,
-          fontWeight: 500,
-          letterSpacing: "0.10em",
-          textTransform: "uppercase",
-          color: "rgba(0,0,0,0.25)",
+          marginTop: 28,
+          width: 220,
           zIndex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        Loading your account…
-      </motion.p>
+        <Progress
+          value={progress}
+          className="h-1.5 w-full bg-gray-100"
+          style={
+            {
+              "--progress-color":
+                progress < 70 ? "#ff6b00" : "#1e78ff",
+            } as React.CSSProperties
+          }
+        />
+        <motion.p
+          key={label}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "rgba(0,0,0,0.35)",
+          }}
+        >
+          {label}
+        </motion.p>
+      </motion.div>
     </div>
   );
 }
+
+// ─── Open in Telegram ─────────────────────────────────────────────────────────
 
 function OpenInTelegramScreen() {
   return (
@@ -195,6 +207,8 @@ function OpenInTelegramScreen() {
     </div>
   );
 }
+
+// ─── Error Screen ─────────────────────────────────────────────────────────────
 
 function ErrorScreen({
   message,
