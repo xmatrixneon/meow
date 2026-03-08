@@ -9,7 +9,7 @@ const navItems = [
   { label: "Home",         icon: Home,          href: "/"             },
   { label: "Numbers",      icon: PhoneCallIcon, href: "/numbers"      },
   { label: "Wallet",       icon: Wallet,        href: "/wallet"       },
-  { label: "Transactions", icon: History,       href: "/transactions" },
+  { label: "History", icon: History,       href: "/history" },
   { label: "Profile",      icon: User,          href: "/profile"      },
 ];
 
@@ -39,7 +39,8 @@ export function BottomNavBar({ className, stickyBottom = true }: BottomNavBarPro
       aria-label="Bottom Navigation"
       className={cn(
         "bg-card dark:bg-card border border-border dark:border-sidebar-border rounded-2xl flex items-end px-2 py-1.5 shadow-xl",
-        stickyBottom && "fixed inset-x-0 bottom-4 mx-auto z-20 w-fit",
+        stickyBottom && "fixed inset-x-0 bottom-4 mx-auto z-20 w-fit max-w-[520px]",
+        
         className,
       )}
     >

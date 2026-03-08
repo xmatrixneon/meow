@@ -18,6 +18,22 @@ function toNumber(value: Prisma.Decimal | number | null | undefined): number {
   return value.toNumber();
 }
 
+/**
+ * Unwrap Prisma errors that may be wrapped inside $transaction.
+ * Prisma re-throws transaction errors wrapped in another error object,
+ * so the original PrismaClientKnownRequestError ends up on `.cause`.
+ */
+function getPrismaError(
+  error: unknown
+): Prisma.PrismaClientKnownRequestError | null {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) return error;
+  if (
+    (error as any)?.cause instanceof Prisma.PrismaClientKnownRequestError
+  )
+    return (error as any).cause;
+  return null;
+}
+
 export const walletRouter = createTRPCRouter({
   /**
    * Get wallet balance and spending totals.
@@ -27,8 +43,8 @@ export const walletRouter = createTRPCRouter({
   balance: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
 
-    // FIX (R1): use upsert instead of findUnique + create to avoid P2002
-    // race when two requests simultaneously hit this endpoint for a new user.
+    // upsert instead of findUnique + create to avoid P2002 race
+    // when two requests simultaneously hit this endpoint for a new user.
     const wallet = await prisma.wallet.upsert({
       where: { userId },
       create: {
@@ -57,7 +73,9 @@ export const walletRouter = createTRPCRouter({
       z.object({
         limit: z.number().min(1).max(100).default(20),
         offset: z.number().min(0).default(0),
-        status: z.enum(["ALL", "COMPLETED", "PENDING", "FAILED"]).default("ALL"),
+        status: z
+          .enum(["ALL", "COMPLETED", "PENDING", "FAILED"])
+          .default("ALL"),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -80,9 +98,6 @@ export const walletRouter = createTRPCRouter({
       }
 
       const baseWhere = { walletId: wallet.id };
-      // FIX (TS1): cast status to TransactionStatus — the zod enum union type
-      // doesn't automatically satisfy Prisma's expected enum type, which can
-      // cause TS compile errors in strict mode.
       const where =
         status === "ALL"
           ? baseWhere
@@ -98,40 +113,36 @@ export const walletRouter = createTRPCRouter({
         }),
       ]);
 
-      const [numberCount, numberCountWithSms, totalSpentFromNumbers, totalTopup] =
-        await Promise.all([
-          prisma.activeNumber.count({ where: { userId, status: "COMPLETED" } }),
+      const [
+        numberCount,
+        numberCountWithSms,
+        totalSpentFromNumbers,
+        totalTopup,
+      ] = await Promise.all([
+        prisma.activeNumber.count({ where: { userId, status: "COMPLETED" } }),
 
-          // FIX #6 (wallet): use `{ not: null }` for Json? field instead of
-          // `{ not: Prisma.DbNull }`. Prisma distinguishes DbNull (SQL NULL) from
-          // JsonNull (JSON `null`), but `{ not: null }` handles both correctly
-          // and is the idiomatic form for "field has any value".
-          prisma.activeNumber.count({
-            where: {
-              userId,
-              status: "COMPLETED",
-              // FIX (TS2): Prisma requires Prisma.DbNull for SQL NULL checks on
-              // Json? fields — plain `null` does not satisfy JsonNullValueFilter type.
-              // Prisma.DbNull = SQL NULL (field absent), Prisma.JsonNull = JSON null value.
-              // We want "field is not SQL NULL" = has been written = { not: Prisma.DbNull }.
-              smsContent: { not: Prisma.DbNull },
-            },
-          }),
+        prisma.activeNumber.count({
+          where: {
+            userId,
+            status: "COMPLETED",
+            smsContent: { not: Prisma.DbNull },
+          },
+        }),
 
-          prisma.activeNumber.aggregate({
-            where: { userId, status: "COMPLETED" },
-            _sum: { price: true },
-          }),
+        prisma.activeNumber.aggregate({
+          where: { userId, status: "COMPLETED" },
+          _sum: { price: true },
+        }),
 
-          prisma.transaction.aggregate({
-            where: {
-              walletId: wallet.id,
-              status: "COMPLETED",
-              type: { in: ["DEPOSIT", "REFUND"] },
-            },
-            _sum: { amount: true },
-          }),
-        ]);
+        prisma.transaction.aggregate({
+          where: {
+            walletId: wallet.id,
+            status: "COMPLETED",
+            type: { in: ["DEPOSIT", "REFUND"] },
+          },
+          _sum: { amount: true },
+        }),
+      ]);
 
       const formattedTransactions = transactions.map((tx) => ({
         id: tx.id,
@@ -160,29 +171,38 @@ export const walletRouter = createTRPCRouter({
   /**
    * Deposit via UTR (race-safe).
    *
-   * Race safety: the unique constraint on Transaction.txnId is the authoritative
-   * dedup guard. Two concurrent requests with the same UTR: one succeeds, the
-   * other gets P2002 → "already used" error.
+   * Flow:
+   *  1. Validate UTR format (zod)
+   *  2. Check our own DB first — if UTR already recorded → "already used"
+   *     (avoids wasting a BharatPe API call AND gives the right error message)
+   *  3. Verify with BharatPe API
+   *  4. Validate amount + payee UPI ID
+   *  5. Insert Transaction + update Wallet inside a DB transaction
+   *  6. P2002 on txnId is the authoritative race-safe dedup guard
    *
-   * Referral bonus: if the depositing user was referred by another user, the
-   * referrer gets a percentage bonus credited to their wallet after the deposit
-   * succeeds. This is fire-and-forget — a referral failure never blocks the
-   * depositor's own credit.
+   * Race safety: the unique constraint on Transaction.txnId is the final
+   * dedup guard. Two concurrent requests with the same UTR: one succeeds,
+   * the other gets P2002 → "already used" error.
    */
   deposit: protectedProcedure
-    .input(z.object({
-      // FIX (V1): validate UTR format before hitting BharatPe API.
-      // Real UPI UTRs are alphanumeric, 8–30 chars. Rejecting obviously
-      // malformed values prevents spam/probe attacks on the payment API.
-      utr: z.string().trim().min(8).max(30).regex(
-        /^[A-Za-z0-9]+$/,
-        "Invalid UTR format — must be 8–30 alphanumeric characters."
-      ),
-    }))
+    .input(
+      z.object({
+        utr: z
+          .string()
+          .trim()
+          .min(8)
+          .max(30)
+          .regex(
+            /^[A-Za-z0-9]+$/,
+            "Invalid UTR format — must be 8–30 alphanumeric characters."
+          ),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       const { utr } = input;
 
+      // ── 1. Load settings ────────────────────────────────────────────────
       const settings = await prisma.settings.findUnique({
         where: { id: "1" },
         select: {
@@ -202,6 +222,24 @@ export const walletRouter = createTRPCRouter({
         });
       }
 
+      // ── 2. Pre-check our DB before calling BharatPe ─────────────────────
+      // BharatPe returns `found: false` or `canCredit: false` for payments
+      // that are already settled on their side — which means we'd surface
+      // "Transaction not found" instead of "already used". Check our own
+      // transactions table first so we give the correct error message and
+      // avoid an unnecessary external API call.
+      const existingTx = await prisma.transaction.findUnique({
+        where: { txnId: utr },
+      });
+
+      if (existingTx) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This UTR has already been used.",
+        });
+      }
+
+      // ── 3. Verify with BharatPe ─────────────────────────────────────────
       let verifyResult;
       try {
         const bharatPeClient = createBharatPeClient(
@@ -211,7 +249,10 @@ export const walletRouter = createTRPCRouter({
         verifyResult = await bharatPeClient.verifyTransaction(utr);
       } catch (error) {
         if (error instanceof BharatPeError) {
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message,
+          });
         }
         throw error;
       }
@@ -224,42 +265,45 @@ export const walletRouter = createTRPCRouter({
         return { success: false, message: "Transaction cannot be credited." };
       }
 
+      // ── 4. Validate amount ───────────────────────────────────────────────
       const rawAmount = verifyResult.amount ?? 0;
-      // SECURITY (C2): validate amount is a positive finite number before any
-      // comparison. BharatPe API could theoretically return null, NaN, -1, or
-      // a string — all of which would pass a naive >= minAmount check.
-      if (typeof rawAmount !== 'number' || !Number.isFinite(rawAmount) || rawAmount <= 0) {
+      if (
+        typeof rawAmount !== "number" ||
+        !Number.isFinite(rawAmount) ||
+        rawAmount <= 0
+      ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Invalid transaction amount received from payment provider.",
+          message:
+            "Invalid transaction amount received from payment provider.",
         });
       }
+
       const amount = rawAmount;
       const minAmount = toNumber(settings.minRechargeAmount);
-
-      // FIX #5 (wallet): settings.maxRechargeAmount is already a Prisma.Decimal —
-      // wrapping it in `new Decimal(...)` is redundant and `new Decimal(null)`
-      // would throw before the `?? 5000` default could apply.
-      // Use toNumber() directly which handles null/undefined safely.
       const maxAmount = toNumber(settings.maxRechargeAmount ?? 5000);
 
       if (amount < minAmount) {
-        return { success: false, message: `Minimum recharge amount is ₹${minAmount}.` };
+        return {
+          success: false,
+          message: `Minimum recharge amount is ₹${minAmount}.`,
+        };
       }
 
       if (amount > maxAmount) {
-        return { success: false, message: `Maximum recharge amount is ₹${maxAmount}.` };
+        return {
+          success: false,
+          message: `Maximum recharge amount is ₹${maxAmount}.`,
+        };
       }
 
-      // FIX (S1): payee UPI ID validation.
-      // If the payment API returns a payeeIdentifier, we MUST validate it —
-      // skipping when settings.upiId is null would accept payments to any UPI ID.
-      // If settings.upiId is unconfigured, treat it as a configuration error.
+      // ── 5. Validate payee UPI ID ─────────────────────────────────────────
       if (verifyResult.payeeIdentifier) {
         if (!settings.upiId) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "UPI ID is not configured — cannot verify payment destination.",
+            message:
+              "UPI ID is not configured — cannot verify payment destination.",
           });
         }
         const apiPayee = verifyResult.payeeIdentifier.toLowerCase();
@@ -273,8 +317,7 @@ export const walletRouter = createTRPCRouter({
         }
       }
 
-      // FIX (R1): upsert is race-safe — concurrent first-time deposits won't
-      // both try to create the wallet and race to P2002.
+      // ── 6. Upsert wallet + insert transaction ────────────────────────────
       const wallet = await prisma.wallet.upsert({
         where: { userId },
         create: {
@@ -287,8 +330,8 @@ export const walletRouter = createTRPCRouter({
         update: {},
       });
 
-      // RACE-SAFE: txnId unique constraint on Transaction is the authoritative
-      // dedup guard. Two concurrent requests with the same UTR: one gets P2002.
+      // txnId unique constraint is the authoritative race-safe dedup guard.
+      // Two concurrent requests with the same UTR: one succeeds, one gets P2002.
       try {
         await prisma.$transaction(async (tx) => {
           await tx.transaction.create({
@@ -317,10 +360,8 @@ export const walletRouter = createTRPCRouter({
           });
         });
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2002"
-        ) {
+        const prismaErr = getPrismaError(error);
+        if (prismaErr?.code === "P2002") {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "This UTR has already been used.",
@@ -329,24 +370,12 @@ export const walletRouter = createTRPCRouter({
         throw error;
       }
 
-      // FIX #8 (wallet): Referral bonus hook.
-      //
-      // If this user was referred by another user and the platform has a
-      // referral percentage configured, credit the referrer a bonus.
-      //
-      // This runs AFTER the deposit transaction commits — fire-and-forget.
-      // A referral failure never blocks the depositor's own credit.
-      //
-      // Schema assumption: User has an optional `referredBy` field (String?)
-      // storing the referrer's userId. Add this to your schema if not present:
-      //   referredBy String?
-      //
-      // TODO: uncomment once `referredBy` is added to the User model in schema.prisma
-      //
+      // ── 7. Referral bonus (fire-and-forget) ─────────────────────────────
+      // TODO: uncomment once `referredBy` is added to the User model.
       // if (settings.referralPercent > 0) {
-      //   creditReferralBonus(userId, amount, settings.referralPercent).catch((err) => {
-      //     console.error(`[referral] Failed to credit bonus for userId=${userId}:`, err);
-      //   });
+      //   creditReferralBonus(userId, amount, settings.referralPercent).catch(
+      //     (err) => console.error(`[referral] Failed for userId=${userId}:`, err)
+      //   );
       // }
 
       return {
@@ -361,50 +390,54 @@ export const walletRouter = createTRPCRouter({
    *
    * Race safety: the PromocodeHistory[promocodeId, userId] unique constraint
    * is the authoritative dedup guard — caught as P2002.
-   * Two simultaneous requests can both pass the fast-path pre-check, but only
-   * one will succeed the transaction insert.
    */
   redeemPromo: protectedProcedure
     .input(
       z.object({
-        // FIX (Z1): .toUpperCase() is not a zod method in zod v3 — use .transform().
-        // .transform() is always valid regardless of zod version.
-        code: z.string().trim().min(1).max(50).transform(s => s.toUpperCase()),
+        code: z
+          .string()
+          .trim()
+          .min(1)
+          .max(50)
+          .transform((s) => s.toUpperCase()),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
       const { code } = input;
 
-      // FIX (W1): use case-insensitive mode for code lookup.
-      // zod transforms input to uppercase, but DB codes may be mixed-case.
-      // findFirst with mode:'insensitive' handles both cases safely.
-      // Note: findUnique does not support mode:'insensitive' — must use findFirst.
       const promocode = await prisma.promocode.findFirst({
         where: { code: { equals: code, mode: "insensitive" } },
       });
 
       if (!promocode || !promocode.isActive) {
-        // SECURITY (H3): use same message for invalid AND inactive — prevents enumeration
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid promo code." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid promo code.",
+        });
       }
 
       if (promocode.usedCount >= promocode.maxUses) {
-        // SECURITY (H3): don't reveal the code exists but is exhausted
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid promo code." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid promo code.",
+        });
       }
 
       // Fast-path check (non-authoritative — P2002 below is the real guard)
       const existingUse = await prisma.promocodeHistory.findUnique({
-        where: { promocodeId_userId: { promocodeId: promocode.id, userId } },
+        where: {
+          promocodeId_userId: { promocodeId: promocode.id, userId },
+        },
       });
 
       if (existingUse) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "You already used this promo code." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You already used this promo code.",
+        });
       }
 
-      // FIX (R1): upsert is race-safe — no P2002 if two promo requests race
-      // on a new user who has no wallet yet.
       const wallet = await prisma.wallet.upsert({
         where: { userId },
         create: {
@@ -419,10 +452,8 @@ export const walletRouter = createTRPCRouter({
 
       try {
         await prisma.$transaction(async (tx) => {
-          // FIX (R2): atomic usedCount guard — use updateMany with usedCount < maxUses
-          // as the WHERE condition. If another request already incremented usedCount
-          // to maxUses, this update matches 0 rows and we throw EXHAUSTED.
-          // This replaces the pre-transaction usedCount check which had a race window.
+          // Atomic usedCount guard — if another request already exhausted
+          // the code between our pre-check and here, this matches 0 rows.
           const guardUpdate = await tx.promocode.updateMany({
             where: {
               id: promocode.id,
@@ -433,16 +464,12 @@ export const walletRouter = createTRPCRouter({
           });
 
           if (guardUpdate.count === 0) {
-            // Either another request exhausted the code between our pre-check
-            // and this transaction, or it was deactivated mid-flight.
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: "Invalid promo code.",
             });
           }
 
-          // PromocodeHistory unique[promocodeId, userId] guards per-user dedup.
-          // This insert throws P2002 if this user already used the code.
           await tx.promocodeHistory.create({
             data: {
               promocodeId: promocode.id,
@@ -455,7 +482,6 @@ export const walletRouter = createTRPCRouter({
             where: { id: wallet.id },
             data: {
               balance: { increment: promocode.amount },
-              // NOT incrementing totalRecharge — promo credits ≠ real deposits
             },
           });
 
@@ -470,11 +496,9 @@ export const walletRouter = createTRPCRouter({
           });
         });
       } catch (error) {
-        if (error instanceof TRPCError) throw error; // re-throw our own errors
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2002"
-        ) {
+        if (error instanceof TRPCError) throw error;
+        const prismaErr = getPrismaError(error);
+        if (prismaErr?.code === "P2002") {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "You already used this promo code.",
@@ -493,13 +517,7 @@ export const walletRouter = createTRPCRouter({
 
 // ─── Referral Bonus Helper ────────────────────────────────────────────────────
 //
-// Called after a successful deposit. Finds the referrer and credits them a
-// percentage of the deposit amount. Idempotent — does nothing if:
-//   - the user was not referred by anyone
-//   - the referrer's wallet is missing
-//   - referralPercent is 0
-//
-// To activate: add `referredBy String?` to the User model in schema.prisma,
+// To activate: add `referredBy String?` to User model in schema.prisma,
 // then uncomment the call in the deposit mutation above.
 //
 // async function creditReferralBonus(

@@ -133,6 +133,14 @@ function ServiceCard({
   onClick: () => void;
   delay: number;
 }) {
+  const price = Number(service.emoji);
+  const priceStr =
+    price > 0
+      ? price % 1 === 0
+        ? String(price)
+        : price.toFixed(2)
+      : null;
+
   return (
     <motion.button
       initial={{ opacity: 0, y: 8 }}
@@ -158,17 +166,36 @@ function ServiceCard({
         <Phone size={14} strokeWidth={2.2} className="text-primary" />
       </div>
 
-      {/* Name */}
-      <p className="flex-1 text-xs font-semibold text-foreground truncate leading-none">
-        {service.name}
-      </p>
-
-      {/* Price badge */}
-      <div className="flex items-center gap-0.5 bg-primary/8 border border-primary/15 rounded-lg px-2 py-1 shrink-0">
-        <IndianRupee size={10} className="text-primary" strokeWidth={2.5} />
-        <span className="text-[11px] font-bold text-primary tabular-nums leading-none">
-          {Number(service.emoji) || "—"}
-        </span>
+      {/* Name + price badge */}
+      <div className="flex-1 flex flex-col gap-1 min-w-0">
+        <p className="text-xs font-semibold text-foreground leading-none truncate">
+          {service.name}
+        </p>
+        {priceStr && (
+          <span className="inline-flex items-center gap-0.5 self-start px-1.5 py-0.5 rounded-md bg-primary/15 border border-primary/25">
+            <span
+              style={{
+                fontSize: "9px",
+                fontWeight: 700,
+                color: "hsl(var(--primary))",
+                lineHeight: 1,
+              }}
+            >
+              ₹
+            </span>
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: 800,
+                color: "hsl(var(--primary))",
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {priceStr}
+            </span>
+          </span>
+        )}
       </div>
     </motion.button>
   );
@@ -484,7 +511,7 @@ export default function MiniAppPage() {
   const RECENT_GAP = 8;
   const RECENT_VISIBLE = 3;
   const recentScrollHeight =
-    RECENT_VISIBLE * RECENT_ROW_H + (RECENT_VISIBLE - 1) * RECENT_GAP + 20; // +20 for padding
+    RECENT_VISIBLE * RECENT_ROW_H + (RECENT_VISIBLE - 1) * RECENT_GAP + 20;
 
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
@@ -627,7 +654,6 @@ export default function MiniAppPage() {
             </button>
           </div>
 
-          {/* Fixed-height scroll area showing ~3 rows */}
           <ScrollArea
             className="w-full rounded-xl border border-border"
             style={{ height: recentScrollHeight }}
@@ -652,7 +678,6 @@ export default function MiniAppPage() {
                         onClick={() => router.push("/numbers")}
                         className="flex items-center gap-2.5 px-3 py-2.5 bg-card border border-border rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 cursor-pointer"
                       >
-                        {/* Flag */}
                         <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
                           {server?.flagUrl ? (
                             <Image
@@ -671,18 +696,12 @@ export default function MiniAppPage() {
                             <Globe size={14} className="text-muted-foreground" />
                           )}
                         </div>
-
-                        {/* Phone number */}
                         <p className="text-xs font-semibold font-mono truncate flex-1 min-w-0">
                           {num.phoneNumber}
                         </p>
-
-                        {/* Service name */}
                         <p className="text-[11px] text-muted-foreground truncate shrink-0 max-w-[64px]">
                           {num.service?.name || "Unknown"}
                         </p>
-
-                        {/* Status badge */}
                         <span
                           className={cn(
                             "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0",

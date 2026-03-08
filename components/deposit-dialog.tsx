@@ -41,16 +41,19 @@ export function DepositDialog({ open, onOpenChange, upiId, qrImage, onSuccess }:
       }
     },
     onError: (error) => {
-      // Provide better error messages
-      let errorMessage = error.message || "Failed to verify payment";
-      if (errorMessage.includes("UTR") || errorMessage.includes("NOT_FOUND")) {
-        errorMessage = "UTR not found. Check the number and try again.";
-      } else if (errorMessage.includes("already") || errorMessage.includes("USED")) {
-        errorMessage = "This UTR has already been used.";
-      } else if (errorMessage.includes("Network") || errorMessage.includes("connection")) {
-        errorMessage = "Connection error. Check your internet and try again.";
+      // Always prefer the server's message — it's specific and correct.
+      // Only fall back to generic messages for network/unknown errors.
+      const msg = error.message || "";
+
+      if (msg.includes("already")) {
+        toast.error("This UTR has already been used.");
+      } else if (msg.includes("not found") || msg.includes("NOT_FOUND")) {
+        toast.error("UTR not found. Check the number and try again.");
+      } else if (msg.includes("Network") || msg.includes("connection")) {
+        toast.error("Connection error. Check your internet and try again.");
+      } else {
+        toast.error(msg || "Failed to verify payment");
       }
-      toast.error(errorMessage);
     },
   });
 

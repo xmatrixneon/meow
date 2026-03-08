@@ -55,6 +55,10 @@ interface TempNumber {
   sms?: string;
   smsList?: SmsEntry[];
   code?: string;
+  // Price paid for this number — shown as superscript next to service name
+  price?: number;
+  // Service icon URL from Service.iconUrl — shown as small icon before service name
+  serviceIcon?: string | null;
   buyTime: Date;
 }
 
@@ -121,6 +125,11 @@ function parseSmsContent(raw: unknown): {
 function getLast10Digits(number: string): string {
   const digits = number.replace(/\D/g, "");
   return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+/** Format price: no decimals if whole number, 2dp otherwise */
+function formatPrice(price: number): string {
+  return price % 1 === 0 ? String(price) : price.toFixed(2);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -447,22 +456,28 @@ function NumberCard({
               {statusLabel}
             </span>
           </div>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <MessageSquare
-              size={10}
-              className="text-muted-foreground shrink-0"
-            />
-            <span className="text-xs text-muted-foreground">
-              {item.service}
-            </span>
-            {item.country && item.country !== "Unknown" && (
-              <>
-                <span className="text-muted-foreground/40">•</span>
-                <span className="text-xs text-muted-foreground">
-                  {item.country}
-                </span>
-              </>
+
+          {/* Service row: [icon] service_name^₹price */}
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {item.serviceIcon ? (
+              <Image
+                src={item.serviceIcon}
+                alt={item.service}
+                width={14}
+                height={14}
+                className="w-3.5 h-3.5 rounded-sm object-contain shrink-0 opacity-80"
+                unoptimized
+              />
+            ) : (
+              <MessageSquare size={10} className="text-muted-foreground shrink-0 opacity-70" />
             )}
+            <span className="text-xs text-muted-foreground font-medium leading-none">
+              {item.service}{item.price !== undefined && (
+                <sup style={{ fontSize: "0.6em", verticalAlign: "super", lineHeight: 0, fontWeight: 700, color: "hsl(var(--primary))", opacity: 0.85, letterSpacing: "-0.01em" }}>
+                  ₹{formatPrice(item.price)}
+                </sup>
+              )}
+            </span>
           </div>
         </div>
 
@@ -506,7 +521,6 @@ function NumberCard({
           whileTap={{ scale: 0.96 }}
           type="button"
           onClick={() => {
-            // Copy only the last 10 digits, stripping any country code prefix (e.g. 91)
             const toCopy = getLast10Digits(item.number);
             navigator.clipboard.writeText(toCopy);
             setCopied(true);
@@ -716,6 +730,9 @@ export default function NumbersPage() {
           sms: displaySms,
           smsList,
           code: extractOTP(displaySms ?? smsList),
+          // Map price from ActiveNumber — convert Decimal/string to number
+          price: n.price != null ? Number(n.price) : undefined,
+          serviceIcon: n.service?.iconUrl ?? null,
           buyTime: new Date(n.createdAt),
         };
       }) ?? []
@@ -746,6 +763,8 @@ export default function NumbersPage() {
             sms: displaySms,
             smsList,
             code: extractOTP(displaySms ?? smsList),
+            price: n.price != null ? Number(n.price) : undefined,
+            serviceIcon: n.service?.iconUrl ?? null,
             buyTime: new Date(n.createdAt),
           };
         }) ?? []
@@ -775,6 +794,8 @@ export default function NumbersPage() {
             sms: undefined,
             smsList: undefined,
             code: undefined,
+            price: n.price != null ? Number(n.price) : undefined,
+            serviceIcon: n.service?.iconUrl ?? null,
             buyTime: new Date(n.createdAt),
           };
         }) ?? []

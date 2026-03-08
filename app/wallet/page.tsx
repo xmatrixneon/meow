@@ -17,6 +17,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  Bitcoin,
   IndianRupeeIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -34,24 +35,39 @@ const fadeUp = (delay = 0) => ({
 });
 
 const transactionIcons = {
-  DEPOSIT: { icon: ArrowDownLeft, color: "text-green-500",  bg: "bg-green-500/10" },
-  PURCHASE: { icon: CreditCard,   color: "text-amber-500",  bg: "bg-amber-500/10" },
-  REFUND:   { icon: TrendingDown, color: "text-sky-500",    bg: "bg-sky-500/10" },
-  PROMO:    { icon: Gift,         color: "text-violet-500", bg: "bg-violet-500/10" },
-  REFERRAL: { icon: Sparkles,     color: "text-pink-500",   bg: "bg-pink-500/10" },
-  ADJUSTMENT: { icon: Zap,        color: "text-orange-500", bg: "bg-orange-500/10" },
+  DEPOSIT: {
+    icon: ArrowDownLeft,
+    color: "text-green-500",
+    bg: "bg-green-500/10",
+  },
+  PURCHASE: {
+    icon: CreditCard,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+  },
+  REFUND: { icon: TrendingDown, color: "text-sky-500", bg: "bg-sky-500/10" },
+  PROMO: { icon: Gift, color: "text-violet-500", bg: "bg-violet-500/10" },
+  REFERRAL: { icon: Sparkles, color: "text-pink-500", bg: "bg-pink-500/10" },
+  ADJUSTMENT: { icon: Zap, color: "text-orange-500", bg: "bg-orange-500/10" },
 };
 
 /** Human-readable title for a transaction type */
 function getTxTitle(type: string): string {
   switch (type) {
-    case "DEPOSIT":    return "Deposit";
-    case "PROMO":      return "Promo Redeemed";
-    case "REFUND":     return "Refund";
-    case "REFERRAL":   return "Referral Bonus";
-    case "ADJUSTMENT": return "Adjustment";
-    case "PURCHASE":   return "Purchase";
-    default:           return type.charAt(0) + type.slice(1).toLowerCase();
+    case "DEPOSIT":
+      return "Deposit";
+    case "PROMO":
+      return "Promo Redeemed";
+    case "REFUND":
+      return "Refund";
+    case "REFERRAL":
+      return "Referral Bonus";
+    case "ADJUSTMENT":
+      return "Adjustment";
+    case "PURCHASE":
+      return "Purchase";
+    default:
+      return type.charAt(0) + type.slice(1).toLowerCase();
   }
 }
 
@@ -65,6 +81,8 @@ function ActionRow({
   onClick,
   badge,
   superscript,
+  superscriptClass,
+  disabled,
 }: {
   icon: React.ElementType;
   iconColor: string;
@@ -75,16 +93,27 @@ function ActionRow({
   onClick?: () => void;
   badge?: string;
   superscript?: string;
+  superscriptClass?: string;
+  disabled?: boolean;
 }) {
   return (
     <motion.button
       {...fadeUp(delay)}
       whileTap={{ scale: 0.985 }}
       type="button"
-      onClick={onClick}
-      className="w-full flex items-center gap-3.5 px-4 py-3.5 hover:bg-muted/50 transition-colors duration-150 text-left group"
+      onClick={!disabled ? onClick : undefined}
+      className={cn(
+        "w-full flex items-center gap-3.5 px-4 py-3.5 text-left group transition-colors duration-150",
+        disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-muted/50",
+      )}
     >
-      <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", iconBg)}>
+      <div
+        className={cn(
+          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+          iconBg,
+          disabled && "grayscale",
+        )}
+      >
         <Icon size={16} strokeWidth={2} className={iconColor} />
       </div>
       <div className="flex-1 min-w-0">
@@ -92,7 +121,12 @@ function ActionRow({
         <p className="font-semibold text-sm text-foreground inline-flex items-start gap-0.5">
           {title}
           {superscript && (
-            <span className="text-[8px] font-bold text-green-500 leading-none mt-0.5 px-1 py-0.5 rounded bg-green-500/10">
+            <span
+              className={cn(
+                "text-[8px] font-bold leading-none mt-0.5 px-1 py-0.5 rounded",
+                superscriptClass || "text-green-500 bg-green-500/10",
+              )}
+            >
               {superscript}
             </span>
           )}
@@ -107,7 +141,12 @@ function ActionRow({
       <ChevronRight
         size={15}
         strokeWidth={2.5}
-        className="text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0"
+        className={cn(
+          "transition-colors shrink-0",
+          disabled
+            ? "text-muted-foreground/30"
+            : "text-muted-foreground/50 group-hover:text-primary",
+        )}
       />
     </motion.button>
   );
@@ -169,8 +208,8 @@ export default function WalletPage() {
   });
   const { data: settings } = trpc.service.settings.useQuery();
 
-  const balance       = Number(walletData?.balance      ?? 0);
-  const totalSpent    = Number(walletData?.totalSpent    ?? 0);
+  const balance = Number(walletData?.balance ?? 0);
+  const totalSpent = Number(walletData?.totalSpent ?? 0);
   const totalRecharge = Number(walletData?.totalRecharge ?? 0);
 
   const transactions =
@@ -206,37 +245,20 @@ export default function WalletPage() {
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-
         {/* ── Balance hero ── */}
         <motion.div
           {...fadeUp(0)}
           className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-5"
         >
-          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
-          <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-primary/5 blur-2xl pointer-events-none" />
-
           <div className="relative">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 mb-3">
-              Wallet
-            </p>
-            <div className="flex items-end gap-2 mb-1">
-              <IndianRupee size={32} className="text-primary" strokeWidth={2.5} />
-              <h1 className="text-4xl font-bold text-foreground tabular-nums tracking-tight">
-                {Number(balance).toFixed(2)}
-              </h1>
-              <span className="text-sm text-muted-foreground mb-1">INR</span>
-            </div>
-            <div className="flex items-center gap-1.5 mb-5">
-              <CheckCircle2 size={12} className="text-green-500" />
-              <p className="text-xs text-muted-foreground">MeowSMS Wallet · Active</p>
-            </div>
-
-            <div className="pt-4 border-t border-primary/15 grid grid-cols-3 gap-2">
+            <div className=" border-primary/15 grid grid-cols-3 gap-2">
               <div className="flex flex-col items-center gap-1.5">
                 <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
                   <TrendingDown size={15} className="text-rose-500" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">Spent</p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  Spent
+                </p>
                 <p className="text-sm font-bold text-rose-500 tabular-nums flex items-center gap-0">
                   <IndianRupee size={11} strokeWidth={2.5} />
                   {Number(totalSpent).toFixed(2)}
@@ -246,7 +268,9 @@ export default function WalletPage() {
                 <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <Wallet size={15} className="text-primary" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">Balance</p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  Balance
+                </p>
                 <p className="text-sm font-bold text-primary tabular-nums flex items-center gap-0">
                   <IndianRupee size={11} strokeWidth={2.5} />
                   {Number(balance).toFixed(2)}
@@ -256,7 +280,9 @@ export default function WalletPage() {
                 <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
                   <TrendingUp size={15} className="text-green-500" />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center leading-tight">Recharge</p>
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  Recharge
+                </p>
                 <p className="text-sm font-bold text-green-500 tabular-nums flex items-center gap-0">
                   <IndianRupee size={11} strokeWidth={2.5} />
                   {Number(totalRecharge).toFixed(2)}
@@ -286,14 +312,17 @@ export default function WalletPage() {
               superscript="INSTANT"
             />
             <ActionRow
-              icon={History}
-              iconColor="text-violet-500"
-              iconBg="bg-violet-500/10"
-              title="Transaction History"
-              subtitle="View all past transactions"
-              delay={0.19}
-              onClick={() => handleNav("/transactions")}
+              icon={Bitcoin}
+              iconColor="text-amber-400"
+              iconBg="bg-amber-600/20"
+              title="Crypto"
+              subtitle="Bitcoin, Ethereum & more"
+              delay={0.16}
+              superscript="SOON"
+              superscriptClass="text-amber-500 bg-amber-500/10"
+              disabled
             />
+            
             <ActionRow
               icon={Gift}
               iconColor="text-violet-500"
@@ -302,6 +331,15 @@ export default function WalletPage() {
               subtitle="Enter code for bonus balance"
               delay={0.25}
               onClick={() => setPromoOpen(true)}
+            />
+            <ActionRow
+              icon={History}
+              iconColor="text-violet-500"
+              iconBg="bg-violet-500/10"
+              title="Transaction History"
+              subtitle="View all past transactions"
+              delay={0.19}
+              onClick={() => handleNav("/history")}
             />
           </motion.div>
         </div>
@@ -315,7 +353,9 @@ export default function WalletPage() {
             {transactions.length === 0 ? (
               <div className="flex flex-col items-center py-8 gap-2">
                 <History size={20} className="text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No transactions yet</p>
+                <p className="text-sm text-muted-foreground">
+                  No transactions yet
+                </p>
               </div>
             ) : (
               transactions.map((tx, i) => {
@@ -323,7 +363,13 @@ export default function WalletPage() {
                   transactionIcons[tx.type as keyof typeof transactionIcons] ||
                   transactionIcons.DEPOSIT;
                 const Icon = config.icon;
-                const isCredit = ["DEPOSIT", "PROMO", "REFERRAL", "REFUND", "ADJUSTMENT"].includes(tx.type);
+                const isCredit = [
+                  "DEPOSIT",
+                  "PROMO",
+                  "REFERRAL",
+                  "REFUND",
+                  "ADJUSTMENT",
+                ].includes(tx.type);
 
                 return (
                   <motion.div
@@ -333,7 +379,12 @@ export default function WalletPage() {
                     transition={{ delay: i * 0.05 }}
                     className="flex items-center gap-3.5 px-4 py-3.5"
                   >
-                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", config.bg)}>
+                    <div
+                      className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+                        config.bg,
+                      )}
+                    >
                       <Icon size={16} className={config.color} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -345,7 +396,9 @@ export default function WalletPage() {
                         {tx.type === "PROMO"
                           ? "Promo code applied"
                           : tx.description ||
-                            formatDistanceToNow(new Date(tx.createdAt), { addSuffix: true })}
+                            formatDistanceToNow(new Date(tx.createdAt), {
+                              addSuffix: true,
+                            })}
                       </p>
                     </div>
                     <p
@@ -374,8 +427,12 @@ export default function WalletPage() {
             <Sparkles size={16} className="text-amber-500" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">More features coming soon</p>
-            <p className="text-xs text-muted-foreground">Auto top-up, spending limits & more</p>
+            <p className="text-sm font-semibold text-foreground">
+              More features coming soon
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Auto top-up, spending limits & more
+            </p>
           </div>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 shrink-0">
             Soon
