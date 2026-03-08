@@ -368,49 +368,7 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
-          <div className="relative mt-5 pt-4 border-t border-primary/15 grid grid-cols-3 gap-2">
-            {/* Total Spent */}
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
-                <TrendingDown size={15} className="text-rose-500" />
-              </div>
-              <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                Spent
-              </p>
-              <p className="text-sm font-bold text-rose-500 tabular-nums flex items-center gap-0">
-                <IndianRupee size={11} strokeWidth={2.5} />
-                {totalSpent.toFixed(2)}
-              </p>
-            </div>
-
-            {/* Balance */}
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Wallet size={15} className="text-primary" />
-              </div>
-              <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                Balance
-              </p>
-              <p className="text-sm font-bold text-primary tabular-nums flex items-center gap-0">
-                <IndianRupee size={11} strokeWidth={2.5} />
-                {balance.toFixed(2)}
-              </p>
-            </div>
-
-            {/* Total Recharge */}
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
-                <TrendingUp size={15} className="text-green-500" />
-              </div>
-              <p className="text-[10px] text-muted-foreground text-center leading-tight">
-                Recharge
-              </p>
-              <p className="text-sm font-bold text-green-500 tabular-nums flex items-center gap-0">
-                <IndianRupee size={11} strokeWidth={2.5} />
-                {totalRecharge.toFixed(2)}
-              </p>
-            </div>
-          </div>
+        
         </motion.div>
 
         {/* API Key Section */}

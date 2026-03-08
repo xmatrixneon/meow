@@ -9,8 +9,8 @@ import { NumberStatus, ActiveStatus, Prisma } from "@/app/generated/prisma/clien
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
 const buySchema = z.object({
-  serviceId: z.string().cuid(),
-  serverId: z.string().cuid(),
+  serviceId: z.string(),
+  serverId: z.string(),
 });
 
 const getStatusSchema = z.object({

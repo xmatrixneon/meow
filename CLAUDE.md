@@ -9,6 +9,7 @@ npm run dev          # Start development server on localhost:3000
 npm run build        # Build for production
 npm run start        # Start production server
 npm run lint         # Run ESLint
+npm run seed:bharatpe # Seed BharatPe payment data (uses tsx)
 ```
 
 ## Database / Prisma
@@ -30,6 +31,12 @@ npx prisma migrate reset
 ```
 
 The Prisma client is generated to `app/generated/prisma/` (not the default location).
+
+### Database Connection (`lib/db.ts`)
+- Uses **PostgreSQL connection pool** with `@prisma/adapter-pg`
+- **Important**: Both Pool and PrismaClient are cached globally to prevent connection leaks during development hot reloads
+- Pool configuration: max 10 connections, 30s idle timeout, 5s connection timeout
+- Exports default `prisma` instance for use throughout the app
 
 ## Authentication Architecture
 
@@ -78,16 +85,118 @@ NEXT_PUBLIC_APP_URL=       # Public app URL
 
 The schema is defined in `prisma/schema.prisma`:
 
+### Core Auth Models
 - **User**: Stores user profile with Telegram-specific fields (telegramId, telegramUsername, firstName, lastName, photoUrl, isPremium, etc.)
 - **Account**: OAuth accounts (type="oauth", providerId="telegram")
 - **Session**: User sessions
 - **Verification**: Email verification tokens
 
+### Wallet & Payments
+- **Wallet**: User wallet with balance, totalSpent, totalOtp, totalRecharge (CHECK constraints enforce non-negative values)
+- **Transaction**: Transaction history (DEPOSIT, PURCHASE, REFUND, PROMO, REFERRAL, ADJUSTMENT) with dedup keys (txnId, refundOrderId)
+
+### Phone Number Services
+- **ActiveNumber**: Purchased phone numbers with status (PENDING/COMPLETED/CANCELLED), expiresAt, price, smsContent
+- **Service**: Available services with basePrice, iconUrl, per-server pricing
+- **OtpServer**: OTP providers with country data, api credentials linkage
+- **ApiCredential**: API credentials for OTP providers (note: apiKey stored in DB - rotate via admin panel, never commit)
+
+### Discounts & Pricing
+- **Promocode**: Discount codes with maxUses, usedCount, isActive
+- **PromocodeHistory**: User promocode usage tracking
+- **CustomPrice**: Per-user per-service custom pricing (FLAT/PERCENT discount types)
+
+### User Management
+- **UserData**: Extended user data with status (ACTIVE/BLOCKED/SUSPENDED), apiCalls, lastApiCall
+- **UserApi**: API access for users with apiKey, rateLimit, refreshCount
+- **UserApiRefreshLog**: Rate limiting for API key refreshes
+- **UserAuditLog**: Audit trail with target user, admin performer, action, changes, reason
+
+### Configuration
+- **Settings**: Global app settings (bharatpeMerchantId, minRechargeAmount, maxRechargeAmount, numberExpiryMinutes, currency, maintenanceMode, etc.)
+
+### Important Schema Notes
+- **Non-negative constraints**: Wallet and ActiveNumber fields have DB CHECK constraints (see migration: `add_wallet_check_constraints.sql`)
+- **UserStatus enum**: Use the enum (ACTIVE/BLOCKED/SUSPENDED) for status checks - never raw strings
+- **Indexes**: Key indexes exist for performance (e.g., `[userId, status]`, `[activeStatus, expiresAt]`, `[orderId, userId]`)
+- **Cascade deletes**: Users cascade to their accounts, sessions, wallets, and related data
+
+## tRPC Architecture
+
+The project uses **tRPC** with **React Query** for type-safe API communication.
+
+### Server-side tRPC (`lib/trpc/trpc.ts`)
+- **Context**: Created with `createTRPCContext()` - extracts session from Better Auth cookies
+- **Procedures**: `publicProcedure` (no auth), `protectedProcedure` (requires authenticated user)
+- **Transformer**: Uses `superjson` for automatic serialization
+- **Error handling**: Formats Zod errors with flattened output
+
+### tRPC Routers (`lib/trpc/routers/`)
+- **_app.ts**: Main router merging all feature routers
+- **service.ts**: Service/number provider operations
+- **number.ts**: Active number management (purchase, cancel, get SMS)
+- **wallet.ts**: Wallet operations (balance, transactions, deposits)
+- **apiKey.ts**: User API key management
+
+### API Handler (`app/api/trpc/[trpc]/route.ts`)
+- Uses `fetchRequestHandler` from `@trpc/server/adapters/fetch`
+- Endpoint: `/api/trpc`
+
+### Client-side tRPC (`lib/trpc/client.ts`)
+- Exports `trpc` client created with `createTRPCReact<AppRouter>()`
+- Integration with TanStack Query for caching and state management
+
+### Usage Example
+```tsx
+import { trpc } from "@/lib/trpc/client";
+
+// Client component
+function MyComponent() {
+  const { data, isLoading } = trpc.wallet.balance.useQuery();
+  const { mutate } = trpc.wallet.deposit.useMutation();
+
+  return <div>{data?.balance}</div>;
+}
+```
+
+### Debug Mode
+Set `DEBUG_TRPC=1` in `.env` to enable tRPC request logging in development.
+
+## Bot Integration
+
+The project includes a **Telegram Bot** built with Grammy.
+
+### Bot Setup (`lib/bot.ts`)
+- **Commands**: `/start` (opens mini app with welcome message), `/help` (help text)
+- **Webhook**: Handled at `app/api/bot/route.ts`
+- **Environment**: Uses `TELEGRAM_BOT_TOKEN` and `NEXT_PUBLIC_APP_URL` for web_app links
+
+### Bot Flow
+1. User opens bot in Telegram
+2. `/start` command replies with photo and "Open MeowSMS" button
+3. Button opens the mini app via `web_app: { url: APP_URL }`
+4. Mini app handles authentication via TelegramAuthProvider
+
+## Payment Integration
+
+The project supports **BharatPe** payment integration.
+
+### Payment Module (`lib/payments/`)
+- **bharatpe.ts**: BharatPe client for transaction verification
+- **Exports**: `BharatPeClient`, `createBharatPeClient`, types for transactions
+
+### Configuration
+- Settings stored in `Settings` table: `bharatpeMerchantId`, `bharatpeToken`, `bharatpeQrImage`
+- Seed script: `npm run seed:bharatpe` to populate initial data
+
 ## Project Structure
 
 ```
 app/                      # Next.js App Router
-  api/auth/[...all]/      # Auth API handler
+  api/auth/[...all]/      # Auth API handler (Better Auth)
+  api/trpc/[trpc]/        # tRPC API handler
+  api/bot/route.ts        # Grammy bot webhook
+  api/stubs/handler_api.php/route.ts  # API stubs
   generated/prisma/       # Generated Prisma client (custom location)
   layout.tsx              # Root layout with TelegramAuthProvider
   page.tsx                # Home page
@@ -103,6 +212,19 @@ components/
 lib/
   auth.ts                 # Server-side Better Auth config
   auth-client.ts          # Client-side Better Auth client
+  bot.ts                  # Grammy Telegram bot with /start, /help commands
+  db.ts                   # Prisma client with PostgreSQL connection pool
+  payments/               # Payment integration (BharatPe)
+    bharatpe.ts           # BharatPe client and transaction verification
+  trpc/                   # tRPC setup and routers
+    trpc.ts               # tRPC context, procedures, error formatter
+    client.ts             # tRPC React client
+    routers/              # tRPC route definitions
+      _app.ts             # Main router merging all routers
+      service.ts          # Service/OTP provider operations
+      number.ts           # Phone number operations
+      wallet.ts           # Wallet operations
+      apiKey.ts           # User API key management
   utils.ts                # Utility functions (cn for classnames)
 types/
   index.ts                # TypeScript types (User, ExtendedSession, ERROR_CODES)
@@ -115,6 +237,7 @@ hooks/
 prisma/
   schema.prisma           # Database schema
   migrations/             # Database migrations
+  seed-bharatpe.ts        # BharatPe payment seed script
 ```
 
 ## Next.js Configuration
@@ -124,6 +247,7 @@ prisma/
 - **allowedDevOrigins**: Includes ngrok domains for development
 - **Path alias**: `@/*` maps to project root
 - **Images**: Configured for Telegram domains (t.me, telegram.org)
+- **Rewrites**: `/stubs/handler_api.php` → `/api/stubs/handler_api.php`
 
 ## Layout Structure
 
@@ -193,3 +317,63 @@ export interface TelegramAuthContextValue {
 ```
 
 This pattern provides a type-safe state machine for authentication flows with clear error handling.
+
+## Key Dependencies
+
+### Framework & Core
+- **Next.js** (16.1.6): React framework with App Router
+- **React** (19.2.3): UI library
+- **TypeScript** (5): Type safety
+
+### Auth & Telegram
+- **better-auth** (1.5.1): Authentication server
+- **better-auth-telegram** (1.4.0): Telegram OAuth integration
+- **@tma.js/sdk-react** (3.0.16): Telegram Mini App SDK
+- **grammy** (1.40.0): Telegram bot framework
+
+### API & Type Safety
+- **@trpc/server** (11.10.0): End-to-end typesafe APIs
+- **@trpc/react-query** (11.10.0): tRPC + TanStack Query integration
+- **@tanstack/react-query** (5.90.21): Data fetching and caching
+- **zod** (4.3.6): Schema validation
+- **superjson** (2.2.6): tRPC data transformer
+
+### Database
+- **prisma** (7.4.1): TypeScript ORM
+- **@prisma/adapter-pg** (7.4.1): PostgreSQL adapter
+- **pg** (8.18.0): PostgreSQL client for connection pool
+
+### UI & Styling
+- **Tailwind CSS** (v4): Utility-first CSS framework
+- **shadcn** (3.8.5): Component system with Radix UI primitives
+- **framer-motion** (12.34.3): Animation library
+- **lucide-react** (0.575.0): Icon library
+
+### Forms & Input
+- **react-hook-form** (7.71.2): Form handling
+- **@hookform/resolvers** (5.2.2): Form validation with zod
+
+### Payments & Utilities
+- **date-fns** (4.1.0): Date manipulation
+- **nanoid** (5.1.6): ID generation
+
+## Environment Variables
+
+```env
+# Database
+DATABASE_URL=              # PostgreSQL connection string
+
+# Better Auth
+BETTER_AUTH_SECRET=        # Secret for Better Auth
+BETTER_AUTH_URL=           # Auth base URL (e.g., ngrok URL)
+
+# Telegram Bot
+TELEGRAM_BOT_TOKEN=        # Your Telegram bot token
+TELEGRAM_BOT_USERNAME=     # Your Telegram bot username
+
+# App URLs
+NEXT_PUBLIC_APP_URL=       # Public app URL
+
+# Optional Debug
+DEBUG_TRPC=1               # Enable tRPC request logging in dev
+```
