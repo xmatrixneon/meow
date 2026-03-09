@@ -1,4 +1,5 @@
 "use client";
+
 import { motion } from "framer-motion";
 import { Home, Wallet, User, PhoneCallIcon, History } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -6,11 +7,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { label: "Home",         icon: Home,          href: "/"             },
-  { label: "Numbers",      icon: PhoneCallIcon, href: "/numbers"      },
-  { label: "Wallet",       icon: Wallet,        href: "/wallet"       },
+  { label: "Home",    icon: Home,          href: "/"        },
+  { label: "Numbers", icon: PhoneCallIcon, href: "/numbers" },
+  { label: "Wallet",  icon: Wallet,        href: "/wallet"  },
   { label: "History", icon: History,       href: "/history" },
-  { label: "Profile",      icon: User,          href: "/profile"      },
+  { label: "Profile", icon: User,          href: "/profile" },
 ];
 
 type BottomNavBarProps = {
@@ -25,22 +26,21 @@ export function BottomNavBar({ className, stickyBottom = true }: BottomNavBarPro
     const exact = navItems.findIndex((item) => item.href === pathname);
     if (exact !== -1) return exact;
     const prefix = navItems.findIndex(
-      (item) => item.href !== "/" && pathname.startsWith(item.href)
+      (item) => item.href !== "/" && pathname.startsWith(item.href),
     );
     return prefix !== -1 ? prefix : 0;
   })();
 
   return (
     <motion.nav
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 300, damping: 26 }}
+      initial={{ y: 16, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 26, delay: 0.05 }}
       role="navigation"
       aria-label="Bottom Navigation"
       className={cn(
-        "bg-card dark:bg-card border border-border dark:border-sidebar-border rounded-2xl flex items-end px-2 py-1.5 shadow-xl",
+        "bg-card border border-border rounded-2xl flex items-center px-1.5 py-1.5 shadow-sm",
         stickyBottom && "fixed inset-x-0 bottom-4 mx-auto z-20 w-fit max-w-[520px]",
-        
         className,
       )}
     >
@@ -54,39 +54,42 @@ export function BottomNavBar({ className, stickyBottom = true }: BottomNavBarPro
             href={item.href}
             aria-label={item.label}
             aria-current={isActive ? "page" : undefined}
-            prefetch={true}
+            prefetch
             className="focus:outline-none"
           >
             <motion.div
-              whileTap={{ scale: 0.92 }}
+              whileTap={{ scale: 0.9 }}
               className={cn(
-                "relative flex flex-col items-center justify-end gap-0.5 px-3 py-1.5 min-w-[56px] rounded-2xl transition-colors duration-200",
-                isActive
-                  ? "bg-primary/10 dark:bg-primary/15"
-                  : "bg-transparent",
+                "relative flex flex-col items-center justify-center gap-0.5 px-3.5 py-2 min-w-[58px] rounded-xl transition-colors duration-200",
+                isActive ? "bg-primary/10" : "hover:bg-muted",
               )}
             >
               <Icon
-                size={20}
-                strokeWidth={isActive ? 2.5 : 2}
+                size={19}
+                strokeWidth={isActive ? 2.5 : 1.8}
                 aria-hidden
                 className={cn(
                   "transition-all duration-200 shrink-0",
-                  isActive
-                    ? "text-primary dark:text-primary"
-                    : "text-muted-foreground",
+                  isActive ? "text-primary" : "text-muted-foreground",
                 )}
               />
               <span
                 className={cn(
-                  "text-[10px] font-medium whitespace-nowrap select-none leading-tight transition-colors duration-200",
-                  isActive
-                    ? "text-primary dark:text-primary"
-                    : "text-muted-foreground",
+                  "text-[10px] font-semibold whitespace-nowrap select-none leading-none transition-colors duration-200",
+                  isActive ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 {item.label}
               </span>
+
+              {/* Active dot indicator */}
+              {isActive && (
+                <motion.div
+                  layoutId="nav-dot"
+                  className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary"
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                />
+              )}
             </motion.div>
           </Link>
         );

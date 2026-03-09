@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import {
   Search,
   Zap,
@@ -17,13 +18,11 @@ import {
   ChevronRight,
   X,
   Server,
-  Wallet,
-  Star,
   Clock,
   IndianRupee,
   Phone,
-  PersonStanding,
   Globe,
+  ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -39,13 +38,6 @@ import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/use-debounce";
 
-// ─── animation helper ─────────────────────────────────────────────────────────
-const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 14 },
-  animate: { opacity: 1, y: 0 },
-  transition: { type: "spring" as const, stiffness: 280, damping: 24, delay },
-});
-
 function getCountryFlagEmoji(isoCode: string): string {
   if (!isoCode || isoCode.length !== 2) return "🌍";
   const codePoints = isoCode
@@ -55,7 +47,6 @@ function getCountryFlagEmoji(isoCode: string): string {
   return String.fromCodePoint(...codePoints);
 }
 
-// ─── types ────────────────────────────────────────────────────────────────────
 interface Service {
   id: string;
   name: string;
@@ -83,47 +74,27 @@ interface ServerOption {
   }>;
 }
 
-// ─── skeleton ─────────────────────────────────────────────────────────────────
 function PageSkeleton() {
   return (
-    <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-      <div className="rounded-3xl border border-border px-5 py-5 flex items-center gap-3.5">
-        <Skeleton className="w-14 h-14 rounded-xl shrink-0" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-5 w-36" />
-          <Skeleton className="h-3 w-24" />
-        </div>
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          <Skeleton className="h-3 w-12" />
-          <Skeleton className="h-3 w-12" />
-        </div>
+    <div className="flex-1 px-4 pt-4 pb-28 max-w-md mx-auto w-full space-y-4">
+      <Skeleton className="h-11 w-full rounded-xl" />
+      <div className="space-y-2">
+        <Skeleton className="h-3.5 w-32" />
+        <Skeleton className="h-[260px] w-full rounded-xl" />
       </div>
-      <Skeleton className="h-11 w-full rounded-2xl" />
-      <div className="space-y-3">
-        <Skeleton className="h-3 w-28" />
-        <div className="grid grid-cols-2 gap-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-2xl" />
-          ))}
-        </div>
-      </div>
-      <div className="border border-border rounded-2xl p-4 space-y-3">
+      <div className="rounded-xl border border-border p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-14" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-12" />
         </div>
-        <div className="flex flex-col items-center py-5 gap-2">
-          <Skeleton className="w-10 h-10 rounded-xl" />
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-3 w-36" />
-        </div>
+        {[...Array(3)].map((_, i) => (
+          <Skeleton key={i} className="h-14 w-full rounded-lg" />
+        ))}
       </div>
     </div>
   );
 }
 
-// ─── service card (horizontal pill) ──────────────────────────────────────────
 function ServiceCard({
   service,
   onClick,
@@ -135,73 +106,36 @@ function ServiceCard({
 }) {
   const price = Number(service.emoji);
   const priceStr =
-    price > 0
-      ? price % 1 === 0
-        ? String(price)
-        : price.toFixed(2)
-      : null;
+    price > 0 ? (price % 1 === 0 ? String(price) : price.toFixed(2)) : null;
 
   return (
     <motion.button
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{
-        type: "spring" as const,
-        stiffness: 300,
-        damping: 24,
-        delay,
-      }}
+      transition={{ type: "spring", stiffness: 320, damping: 28, delay }}
       whileTap={{ scale: 0.97 }}
       type="button"
       onClick={onClick}
-      className={cn(
-        "flex items-center gap-2.5 px-3 py-2.5 w-full",
-        "bg-card border border-border rounded-2xl",
-        "hover:border-primary/40 hover:bg-primary/5",
-        "transition-all duration-200 group text-left",
-      )}
+      className="flex items-center gap-2.5 px-3 py-2.5 w-full bg-background border border-border rounded-xl hover:border-primary/60 hover:bg-accent transition-all duration-150 group text-left"
     >
-      {/* Icon */}
-      <div className="w-8 h-8 rounded-xl bg-primary/10 dark:bg-primary/15 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors duration-200">
-        <Phone size={14} strokeWidth={2.2} className="text-primary" />
+      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
+        <Phone size={13} strokeWidth={2.2} className="text-primary" />
       </div>
-
-      {/* Name + price badge */}
-      <div className="flex-1 flex flex-col gap-1 min-w-0">
-        <p className="text-xs font-semibold text-foreground leading-none truncate">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-foreground truncate leading-tight">
           {service.name}
         </p>
         {priceStr && (
-          <span className="inline-flex items-center gap-0.5 self-start px-1.5 py-0.5 rounded-md bg-primary/15 border border-primary/25">
-            <span
-              style={{
-                fontSize: "9px",
-                fontWeight: 700,
-                color: "hsl(var(--primary))",
-                lineHeight: 1,
-              }}
-            >
-              ₹
-            </span>
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: 800,
-                color: "hsl(var(--primary))",
-                lineHeight: 1,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {priceStr}
-            </span>
-          </span>
+          <p className="text-[11px] font-bold text-primary tabular-nums">
+            ₹{priceStr}
+          </p>
         )}
       </div>
+      <ChevronRight size={12} className="text-muted-foreground/40 shrink-0 group-hover:text-primary/50 transition-colors" />
     </motion.button>
   );
 }
 
-// ─── server card ──────────────────────────────────────────────────────────────
 function ServerCard({
   server,
   selectedServiceName,
@@ -227,113 +161,96 @@ function ServerCard({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring" as const, stiffness: 280, damping: 24 }}
+      transition={{ type: "spring", stiffness: 280, damping: 26 }}
       className={cn(
-        "bg-card border rounded-2xl p-4",
-        outOfStock
-          ? "border-border opacity-60"
-          : "border-border hover:border-primary/30",
+        "bg-card border rounded-xl",
+        outOfStock ? "border-border/50 opacity-60" : "border-border",
       )}
     >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2.5">
-          <div
-            className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden",
-              outOfStock ? "bg-muted" : "bg-primary/10 dark:bg-primary/15",
-            )}
-          >
-            {server.flagUrl ? (
-              <Image
-                src={server.flagUrl}
-                alt={server.countryName || server.countryCode}
-                width={36}
-                height={36}
-                className="w-full h-full object-cover"
-                unoptimized
-              />
-            ) : server.countryIso ? (
-              <span className="text-lg">
-                {getCountryFlagEmoji(server.countryIso)}
-              </span>
-            ) : (
-              <Server
-                size={16}
-                strokeWidth={2}
-                className={
-                  outOfStock ? "text-muted-foreground" : "text-primary"
-                }
-              />
-            )}
-          </div>
-          <div>
-            <p className="font-bold text-sm text-foreground">{server.name}</p>
-            <div className="flex items-center gap-0.5">
-              <IndianRupee size={12} className="text-primary" />
-              <p className="text-xl font-bold text-primary tabular-nums">
-                {price.toFixed(2)}
-              </p>
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 overflow-hidden border border-border/50">
+              {server.flagUrl ? (
+                <Image
+                  src={server.flagUrl}
+                  alt={server.countryName || server.countryCode}
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              ) : server.countryIso ? (
+                <span className="text-xl">{getCountryFlagEmoji(server.countryIso)}</span>
+              ) : (
+                <Server size={16} strokeWidth={2} className="text-muted-foreground" />
+              )}
+            </div>
+            <div>
+              <p className="font-bold text-sm text-foreground leading-tight">{server.name}</p>
+              <div className="flex items-baseline gap-0.5 mt-0.5">
+                <IndianRupee size={12} strokeWidth={2.5} className="text-primary mb-px" />
+                <span className="text-xl font-black text-primary tabular-nums leading-none">
+                  {price.toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-        <Button
-          size="sm"
-          disabled={outOfStock}
-          onClick={onBuy}
-          className="rounded-xl h-9 px-4 text-xs font-bold shrink-0"
-        >
-          {outOfStock ? (
-            "Sold out"
-          ) : (
-            <span className="flex items-center gap-1.5">
-              <ShoppingCart size={13} />
-              Buy
-            </span>
-          )}
-        </Button>
-      </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <div className="flex flex-col items-center gap-0.5 bg-muted/40 rounded-xl py-2">
-          <div className="flex items-center gap-1">
-            {lowStock && <AlertCircle size={10} className="text-amber-500" />}
-            <p
-              className={cn(
-                "text-sm font-bold tabular-nums",
-                outOfStock
-                  ? "text-muted-foreground"
-                  : lowStock
-                    ? "text-amber-500"
-                    : "text-foreground",
-              )}
-            >
-              {server.stock}
-            </p>
-          </div>
-          <p className="text-[10px] text-muted-foreground">In stock</p>
+          <Button
+            size="sm"
+            disabled={outOfStock}
+            onClick={onBuy}
+            className="rounded-lg h-9 px-4 text-xs font-semibold shrink-0"
+          >
+            {outOfStock ? (
+              "Sold out"
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <ShoppingCart size={13} />
+                Buy
+              </span>
+            )}
+          </Button>
         </div>
-        <div className="flex flex-col items-center gap-0.5 bg-muted/40 rounded-xl py-2">
-          <div className="flex items-center gap-1">
-            <CheckCircle2 size={10} className="text-green-500" />
-            <p className="text-sm font-bold text-green-500 tabular-nums">
-              {server.successRate}%
-            </p>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
+            <div className="flex items-center gap-1">
+              {lowStock && <AlertCircle size={10} className="text-amber-500" />}
+              <span
+                className={cn(
+                  "text-sm font-bold tabular-nums",
+                  outOfStock ? "text-muted-foreground" : lowStock ? "text-amber-500" : "text-foreground",
+                )}
+              >
+                {server.stock}
+              </span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">Stock</span>
           </div>
-          <p className="text-[10px] text-muted-foreground">Success</p>
-        </div>
-        <div className="flex flex-col items-center gap-0.5 bg-muted/40 rounded-xl py-2">
-          <div className="flex items-center gap-1">
-            <Clock size={10} className="text-sky-500" />
-            <p className="text-sm font-bold text-sky-500">{server.avgTime}</p>
+          <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
+            <div className="flex items-center gap-1">
+              <CheckCircle2 size={10} className="text-green-500" />
+              <span className="text-sm font-bold text-green-500 tabular-nums">
+                {server.successRate}%
+              </span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">Success</span>
           </div>
-          <p className="text-[10px] text-muted-foreground">Avg time</p>
+          <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
+            <div className="flex items-center gap-1">
+              <Clock size={10} className="text-sky-500" />
+              <span className="text-sm font-bold text-sky-500">{server.avgTime}</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">Avg time</span>
+          </div>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// ─── page ─────────────────────────────────────────────────────────────────────
 export default function MiniAppPage() {
   const { data: session, isPending } = authClient.useSession();
 
@@ -354,13 +271,11 @@ export default function MiniAppPage() {
     setAccumulatedServices([]);
   }, [debouncedSearch]);
 
-  const { data: servicesData, isLoading: isLoadingServices, isFetching } =
-    trpc.service.list.useQuery(
-      { search: debouncedSearch, limit: 20, offset: serviceOffset },
-      { staleTime: 5 * 60 * 1000 },
-    );
+  const { data: servicesData, isFetching } = trpc.service.list.useQuery(
+    { search: debouncedSearch, limit: 20, offset: serviceOffset },
+    { staleTime: 5 * 60 * 1000 },
+  );
 
-  // Accumulate services as we load more
   useEffect(() => {
     if (servicesData?.services) {
       const newServices = servicesData.services.map((s) => ({
@@ -369,23 +284,19 @@ export default function MiniAppPage() {
         emoji: String(s.basePrice ?? ""),
         category: "Service",
       }));
-
       if (serviceOffset === 0) {
         setAccumulatedServices(newServices);
       } else {
         setAccumulatedServices((prev) => {
           const existingIds = new Set(prev.map((s) => s.id));
-          const uniqueNew = newServices.filter((s) => !existingIds.has(s.id));
-          return [...prev, ...uniqueNew];
+          return [...prev, ...newServices.filter((s) => !existingIds.has(s.id))];
         });
       }
     }
   }, [servicesData?.services, serviceOffset]);
 
-  // Intersection Observer for infinite scroll on services
   useEffect(() => {
     if (!servicesData?.hasMore || isFetching) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && servicesData?.hasMore && !isFetching) {
@@ -394,25 +305,12 @@ export default function MiniAppPage() {
       },
       { threshold: 0.1, rootMargin: "100px" },
     );
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current);
-    }
-
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
   }, [servicesData?.hasMore, isFetching]);
-  const { data: serversData } = trpc.service.servers.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: walletData } = trpc.wallet.balance.useQuery();
-  const { data: settingsData } = trpc.service.settings.useQuery();
-  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(
-    undefined,
-    {
-      staleTime: 60 * 1000,
-    },
-  );
 
+  const { data: serversData } = trpc.service.servers.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
+  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(undefined, { staleTime: 60 * 1000 });
   const utils = trpc.useUtils();
 
   const buyMutation = trpc.number.buy.useMutation({
@@ -422,40 +320,26 @@ export default function MiniAppPage() {
         utils.number.getReceivedInfinite.invalidate();
         utils.wallet.balance.invalidate();
         utils.wallet.transactions.invalidate();
-
-        toast.success("Number assigned successfully!");
+        toast.success("Number assigned!");
         setBought(selectedServerId);
         setTimeout(() => {
           setSheetOpen(false);
           router.push("/numbers");
-        }, 1000);
+        }, 800);
       }
     },
     onError: (error) => {
-      let errorMessage = error.message || "Failed to assign number";
-      if (
-        errorMessage.includes("balance") ||
-        errorMessage.includes("INSUFFICIENT")
-      ) {
-        errorMessage = "Insufficient balance. Add funds to continue.";
-      } else if (
-        errorMessage.includes("service") ||
-        errorMessage.includes("AVAILABLE")
-      ) {
-        errorMessage = "Service temporarily unavailable. Try another server.";
-      } else if (
-        errorMessage.includes("Network") ||
-        errorMessage.includes("connection")
-      ) {
-        errorMessage = "Connection error. Check your internet and try again.";
-      }
-      toast.error(errorMessage);
+      let msg = error.message || "Failed to assign number";
+      if (msg.includes("balance") || msg.includes("INSUFFICIENT"))
+        msg = "Insufficient balance.";
+      else if (msg.includes("service") || msg.includes("AVAILABLE"))
+        msg = "Service temporarily unavailable.";
+      toast.error(msg);
       setBuying(null);
     },
   });
 
   const services = accumulatedServices;
-
   const servers: ServerOption[] =
     serversData?.servers.map((s: any) => ({
       id: s.id,
@@ -473,15 +357,6 @@ export default function MiniAppPage() {
 
   const user = session?.user as User | undefined;
 
-  const displayName =
-    user?.name ||
-    user?.firstName ||
-    user?.telegramUsername ||
-    (user?.telegramId ? `User ${user.telegramId}` : null) ||
-    "User";
-  const initials = displayName.charAt(0).toUpperCase();
-  const avatarUrl = user?.photoUrl ?? null;
-
   const handleSelectService = (service: Service) => {
     setSelected(service);
     setBought(null);
@@ -492,45 +367,36 @@ export default function MiniAppPage() {
     if (!selected) return;
     setSelectedServerId(serverId);
     setBuying(serverId);
-
     const server = serversData?.servers.find((s: any) => s.id === serverId);
     const service = server?.services?.find(
       (s: any) =>
         s.name.toLowerCase() === selected.name.toLowerCase() ||
         s.code.toLowerCase() === selected.name.toLowerCase(),
     );
-
     if (!service) {
       toast.error("Service not available on this server");
       setBuying(null);
       return;
     }
-
-    buyMutation.mutate({
-      serviceId: service.id,
-      serverId: serverId,
-    });
+    buyMutation.mutate({ serviceId: service.id, serverId });
   };
 
-  if (isPending && !user) {
-    return <PageSkeleton />;
-  }
+  if (isPending && !user) return <PageSkeleton />;
 
   if (!user) {
     return (
-      <div className="min-h-[calc(100vh-7rem)] flex flex-col items-center justify-center gap-5 p-6">
+      <div className="min-h-[calc(100vh-7rem)] flex flex-col items-center justify-center p-6">
         <motion.div
-          initial={{ scale: 0.85, opacity: 0 }}
+          initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring" as const, stiffness: 300, damping: 22 }}
-          className="w-full max-w-sm bg-card border border-border rounded-3xl p-8 flex flex-col items-center gap-4 shadow-xl text-center"
+          className="w-full max-w-sm bg-card border border-border rounded-2xl p-8 flex flex-col items-center gap-4 text-center"
         >
-          <div className="w-14 h-14 rounded-2xl bg-destructive/10 flex items-center justify-center">
-            <Zap size={24} className="text-destructive" />
+          <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
+            <Zap size={22} className="text-destructive" />
           </div>
           <div>
-            <p className="font-semibold text-foreground mb-1">Not available</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="font-semibold text-foreground">Not available</p>
+            <p className="text-sm text-muted-foreground mt-1">
               Open this app inside Telegram to continue.
             </p>
           </div>
@@ -539,50 +405,60 @@ export default function MiniAppPage() {
     );
   }
 
-  // Each recent number row is ~52px tall + 8px gap; show 3 rows = ~164px
-  const RECENT_ROW_H = 52;
-  const RECENT_GAP = 8;
-  const RECENT_VISIBLE = 3;
-  const recentScrollHeight =
-    RECENT_VISIBLE * RECENT_ROW_H + (RECENT_VISIBLE - 1) * RECENT_GAP + 20;
-
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
-      <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-    
+      <div className="flex-1 px-4 pt-4 pb-28 max-w-md mx-auto w-full space-y-4">
 
         {/* Search */}
-        <motion.div {...fadeUp(0.06)} className="relative">
-          <Search
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-          />
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 28 }}
+          className="relative"
+        >
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Search service (Telegram, Google…)"
+            placeholder="Search service — Telegram, Google…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-9 rounded-2xl border-border bg-card h-11 text-sm"
+            className="pl-9 pr-9 rounded-xl border-border bg-background h-11 text-sm focus-visible:ring-1"
           />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X size={14} />
-            </button>
-          )}
+          <AnimatePresence>
+            {search && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={14} />
+              </motion.button>
+            )}
+          </AnimatePresence>
         </motion.div>
 
-        {/* Services section */}
-        <motion.div {...fadeUp(0.1)}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 px-1 mb-3">
-            {debouncedSearch
-              ? `Results for "${debouncedSearch}"`
-              : "Choose a service"}
-          </p>
+        {/* Services */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 28, delay: 0.06 }}
+        >
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {debouncedSearch ? `"${debouncedSearch}"` : "Choose a service"}
+            </p>
+            {isFetching && (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                className="w-3 h-3 rounded-full border-2 border-primary/30 border-t-primary"
+              />
+            )}
+          </div>
 
-          <ScrollArea className="h-[272px] w-full rounded-2xl border border-border">
+          <ScrollArea className="h-[260px] w-full rounded-xl border border-border bg-card">
             <div className="p-2.5">
               <AnimatePresence mode="popLayout">
                 {services.length === 0 ? (
@@ -591,21 +467,21 @@ export default function MiniAppPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="flex flex-col items-center py-10 gap-2"
+                    className="flex flex-col items-center py-12 gap-2"
                   >
-                    <Hash size={28} className="text-muted-foreground/40" />
+                    <Hash size={24} className="text-muted-foreground/30" />
                     <p className="text-sm text-muted-foreground">
-                      No services found
+                      {debouncedSearch ? "No services found" : "Loading services…"}
                     </p>
                   </motion.div>
                 ) : (
-                  <motion.div key="grid" className="grid grid-cols-2 gap-2">
+                  <motion.div key="grid" className="grid grid-cols-2 gap-1.5">
                     {services.map((service, i) => (
                       <ServiceCard
                         key={service.id}
                         service={service}
                         onClick={() => handleSelectService(service)}
-                        delay={i * 0.03}
+                        delay={Math.min(i * 0.025, 0.3)}
                       />
                     ))}
                   </motion.div>
@@ -613,16 +489,13 @@ export default function MiniAppPage() {
               </AnimatePresence>
 
               {servicesData?.hasMore && (
-                <div ref={loadMoreRef} className="flex justify-center pt-4 pb-1">
+                <div ref={loadMoreRef} className="flex justify-center py-3">
                   {isFetching && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                        className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
-                      />
-                      <span className="text-sm">Loading more...</span>
-                    </div>
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                      className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
+                    />
                   )}
                 </div>
               )}
@@ -630,127 +503,99 @@ export default function MiniAppPage() {
           </ScrollArea>
         </motion.div>
 
-        {/* Recent numbers */}
+        {/* Recent Numbers */}
         <motion.div
-          {...fadeUp(0.18)}
-          className="bg-card border border-border rounded-2xl p-4"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 28, delay: 0.12 }}
+          className="bg-card border border-border rounded-xl overflow-hidden"
         >
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-foreground">
-              Recent Numbers
-            </p>
+          <div className="flex items-center justify-between px-4 pt-2">
+            <p className="text-sm font-semibold text-foreground">Recent Numbers</p>
             <button
               type="button"
               onClick={() => router.push("/numbers")}
-              className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
+              className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
-              View all <ChevronRight size={12} />
+              View all <ArrowRight size={11} />
             </button>
           </div>
 
-          <ScrollArea
-            className="w-full rounded-xl border border-border"
-            style={{ height: recentScrollHeight }}
-          >
-            <div className="p-2">
-              {recentNumbersData?.numbers &&
-              recentNumbersData.numbers.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {recentNumbersData.numbers.map((num) => {
-                    const server = num.service?.server;
-                    const isCompleted = num.status === "COMPLETED";
-                    const isCancelled = num.status === "CANCELLED";
-                    const statusLabel = isCompleted
-                      ? "Received"
-                      : isCancelled
-                        ? "Cancelled"
-                        : "Waiting";
+          <div className="px-3 pb-3 space-y-1.5">
+            {recentNumbersData?.numbers && recentNumbersData.numbers.length > 0 ? (
+              recentNumbersData.numbers.map((num, i) => {
+                const server = num.service?.server;
+                const isCompleted = num.status === "COMPLETED";
+                const isCancelled = num.status === "CANCELLED";
+                const statusLabel = isCompleted ? "Received" : isCancelled ? "Cancelled" : "Waiting";
 
-                    return (
-                      <div
-                        key={num.id}
-                        onClick={() => router.push("/numbers")}
-                        className="flex items-center gap-2.5 px-3 py-2.5 bg-card border border-border rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 cursor-pointer"
-                      >
-                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-                          {server?.flagUrl ? (
-                            <Image
-                              src={server.flagUrl}
-                              alt={server.countryName || ""}
-                              width={32}
-                              height={32}
-                              className="w-full h-full object-cover"
-                              unoptimized
-                            />
-                          ) : server?.countryIso ? (
-                            <span className="text-sm">
-                              {getCountryFlagEmoji(server.countryIso)}
-                            </span>
-                          ) : (
-                            <Globe size={14} className="text-muted-foreground" />
-                          )}
-                        </div>
-                        <p className="text-xs font-semibold font-mono truncate flex-1 min-w-0">
-                          {num.phoneNumber}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground truncate shrink-0 max-w-[64px]">
-                          {num.service?.name || "Unknown"}
-                        </p>
-                        <span
-                          className={cn(
-                            "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0",
-                            isCompleted
-                              ? "bg-green-500/10 border-green-500/30 text-green-500"
-                              : isCancelled
-                                ? "bg-red-500/10 border-red-500/30 text-red-500"
-                                : "bg-amber-400/10 border-amber-400/30 text-amber-500",
-                          )}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center py-8 gap-2">
-                  <Hash size={28} className="text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">No numbers yet</p>
-                  <p className="text-xs text-muted-foreground/60">
-                    Pick a service above to get started
-                  </p>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
+                return (
+                  <motion.div
+                    key={num.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    onClick={() => router.push("/numbers")}
+                    className="flex items-center gap-2.5 px-3 py-2.5 bg-background border border-border/60 rounded-lg hover:border-border hover:bg-accent transition-all duration-150 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                      {server?.flagUrl ? (
+                        <Image src={server.flagUrl} alt={server.countryName || ""} width={28} height={28} className="w-full h-full object-cover" unoptimized />
+                      ) : server?.countryIso ? (
+                        <span className="text-sm">{getCountryFlagEmoji(server.countryIso)}</span>
+                      ) : (
+                        <Globe size={13} className="text-muted-foreground" />
+                      )}
+                    </div>
+                    <p className="text-xs font-mono font-semibold flex-1 truncate">{num.phoneNumber}</p>
+                    <p className="text-[10px] text-muted-foreground shrink-0 max-w-[60px] truncate">
+                      {num.service?.name || "Unknown"}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[9px] font-semibold px-1.5 py-0 h-4 rounded-full shrink-0",
+                        isCompleted
+                          ? "border-green-500/40 text-green-500 bg-green-500/5"
+                          : isCancelled
+                            ? "border-destructive/40 text-destructive bg-destructive/5"
+                            : "border-amber-500/40 text-amber-500 bg-amber-500/5",
+                      )}
+                    >
+                      {statusLabel}
+                    </Badge>
+                  </motion.div>
+                );
+              })
+            ) : (
+              <div className="flex flex-col items-center py-8 gap-2">
+                <Hash size={22} className="text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">No numbers yet</p>
+                <p className="text-xs text-muted-foreground/60">Pick a service above to get started</p>
+              </div>
+            )}
+          </div>
         </motion.div>
       </div>
 
       {/* Server selection sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent
-          side="bottom"
-          className="rounded-t-3xl max-h-[82vh] flex flex-col px-0 pb-0"
-        >
-          <SheetHeader className="px-5 pt-2 pb-3 border-b border-border shrink-0">
-            <SheetTitle className="flex items-center gap-2.5 text-left">
-              {selected && (
-                <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Phone size={16} strokeWidth={2.2} className="text-primary" />
-                </span>
-              )}
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[80vh] flex flex-col px-0 pb-0">
+          <SheetHeader className="px-5 pt-4 pb-3 border-b border-border shrink-0">
+            <SheetTitle className="flex items-center gap-3 text-left">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Phone size={15} strokeWidth={2.2} className="text-primary" />
+              </div>
               <div>
-                <p className="font-bold text-base text-foreground">
-                  {selected?.name}
-                </p>
-                <p className="text-xs text-muted-foreground font-normal">
-                  Choose a server to get a number
+                <p className="font-bold text-base leading-tight">{selected?.name}</p>
+                <p className="text-xs text-muted-foreground font-normal mt-0.5">
+                  Choose a server below
                 </p>
               </div>
             </SheetTitle>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
             {servers.map((server) => (
               <div key={server.id} className="relative">
                 <ServerCard
@@ -765,20 +610,14 @@ export default function MiniAppPage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-card/80 backdrop-blur-sm rounded-2xl flex items-center justify-center gap-2"
+                      className="absolute inset-0 bg-background/80 backdrop-blur-sm rounded-xl flex items-center justify-center gap-2.5"
                     >
                       <motion.div
                         animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 0.8,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                        className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary"
+                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                        className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
                       />
-                      <span className="text-sm font-medium text-foreground">
-                        Assigning number…
-                      </span>
+                      <span className="text-sm font-medium">Assigning number…</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
