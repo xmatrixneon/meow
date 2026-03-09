@@ -41,7 +41,7 @@ interface TempNumber {
   countryCode: string; countryIso?: string | null; countryFlag?: string | null;
   service: string; serviceId?: string; serverId?: string; status: TabValue;
   smsReceived: boolean; expiresAt: Date; sms?: string; smsList?: SmsEntry[];
-  code?: string; buyTime: Date;
+  code?: string; buyTime: Date; updatedAt?: Date;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -353,19 +353,30 @@ function NumberCard({
           </p>
         </div>
 
-        {!isCancelled && (
+        {/* Countdown timer - only for waiting numbers */}
+        {displayStatus === "waiting" && !hasSms && (
           <div className="flex items-center gap-1 shrink-0">
-            <Timer
-              size={11}
-              className={hasSms ? "text-green-500" : "text-amber-500"}
-            />
-            <span
-              className={cn(
-                "text-xs font-mono font-bold tabular-nums",
-                hasSms ? "text-green-500" : "text-amber-500",
-              )}
-            >
+            <Timer size={11} className="text-amber-500" />
+            <span className="text-xs font-mono font-bold tabular-nums text-amber-500">
               {expiresIn}
+            </span>
+          </div>
+        )}
+        {/* Time ago for cancelled numbers */}
+        {isCancelled && item.updatedAt && (
+          <div className="flex items-center gap-1 shrink-0 text-muted-foreground">
+            <Clock size={11} />
+            <span className="text-xs font-medium">
+              {formatTimeAgo(item.updatedAt.toISOString())}
+            </span>
+          </div>
+        )}
+        {/* Time ago for received numbers */}
+        {displayStatus === "received" && item.updatedAt && (
+          <div className="flex items-center gap-1 shrink-0 text-green-500">
+            <CheckCheck size={11} />
+            <span className="text-xs font-medium">
+              {formatTimeAgo(item.updatedAt.toISOString())}
             </span>
           </div>
         )}
@@ -635,6 +646,7 @@ export default function NumbersPage() {
           smsList,
           code: extractOTP(displaySms ?? smsList),
           buyTime: new Date(n.createdAt),
+          updatedAt: n.updatedAt ? new Date(n.updatedAt) : undefined,
         };
       }) ?? [],
     [receivedData],
@@ -662,6 +674,7 @@ export default function NumbersPage() {
           smsList: undefined,
           code: undefined,
           buyTime: new Date(n.createdAt),
+          updatedAt: n.updatedAt ? new Date(n.updatedAt) : undefined,
         };
       }) ?? [],
     [cancelledData],

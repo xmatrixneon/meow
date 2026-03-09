@@ -561,7 +561,7 @@ export default function MiniAppPage() {
           transition={{ type: "spring", stiffness: 300, damping: 28, delay: 0.12 }}
           className="bg-card border border-border rounded-xl overflow-hidden"
         >
-          <div className="flex items-center justify-between px-4 pt-2">
+          <div className="flex items-center justify-between px-4 pt-3 pb-2">
             <p className="text-sm font-semibold text-foreground">
               Recent Numbers
             </p>
@@ -574,77 +574,79 @@ export default function MiniAppPage() {
             </button>
           </div>
 
-          <div className="px-3 pb-3 space-y-1.5">
-            {recentNumbersData?.numbers &&
-            recentNumbersData.numbers.length > 0 ? (
-              recentNumbersData.numbers.map((num, i) => {
-                const server = num.service?.server;
-                const isCompleted = num.status === "COMPLETED";
-                const isCancelled = num.status === "CANCELLED";
-                const statusLabel = isCompleted
-                  ? "Received"
-                  : isCancelled
-                    ? "Cancelled"
-                    : "Waiting";
+          <ScrollArea className="h-[180px]">
+            <div className="px-3 pb-3 space-y-1.5">
+              {recentNumbersData?.numbers &&
+              recentNumbersData.numbers.length > 0 ? (
+                recentNumbersData.numbers.slice(0, 5).map((num, i) => {
+                  const server = num.service?.server;
+                  const isCompleted = num.status === "COMPLETED";
+                  const isCancelled = num.status === "CANCELLED";
+                  const statusLabel = isCompleted
+                    ? "Received"
+                    : isCancelled
+                      ? "Cancelled"
+                      : "Waiting";
 
-                return (
-                  <motion.div
-                    key={num.id}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    onClick={() => router.push("/numbers")}
-                    className="flex items-center gap-2.5 px-3 py-2.5 bg-background border border-border/60 rounded-lg hover:border-border hover:bg-accent transition-all duration-150 cursor-pointer"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                      {server?.flagUrl ? (
-                        <Image
-                          src={server.flagUrl}
-                          alt={server.countryName || ""}
-                          width={28}
-                          height={28}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : server?.countryIso ? (
-                        <span className="text-sm">
-                          {getCountryFlagEmoji(server.countryIso)}
-                        </span>
-                      ) : (
-                        <Globe size={13} className="text-muted-foreground" />
-                      )}
-                    </div>
-                    <p className="text-xs font-mono font-semibold flex-1 truncate">
-                      {num.phoneNumber}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground shrink-0 max-w-[60px] truncate">
-                      {num.service?.name || "Unknown"}
-                    </p>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[9px] font-semibold px-1.5 py-0 h-4 rounded-full shrink-0",
-                        isCompleted
-                          ? "border-green-500/40 text-green-500 bg-green-500/5"
-                          : isCancelled
-                            ? "border-destructive/40 text-destructive bg-destructive/5"
-                            : "border-amber-500/40 text-amber-500 bg-amber-500/5",
-                      )}
+                  return (
+                    <motion.div
+                      key={num.id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      onClick={() => router.push("/numbers")}
+                      className="flex items-center gap-2.5 px-3 py-2.5 bg-background border border-border/60 rounded-lg hover:border-border hover:bg-accent transition-all duration-150 cursor-pointer"
                     >
-                      {statusLabel}
-                    </Badge>
-                  </motion.div>
-                );
-              })
-            ) : (
-              <div className="flex flex-col items-center py-8 gap-2">
-                <Hash size={22} className="text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No numbers yet</p>
-                <p className="text-xs text-muted-foreground/60">
-                  Pick a service above to get started
-                </p>
-              </div>
-            )}
-          </div>
+                      <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                        {server?.flagUrl ? (
+                          <Image
+                            src={server.flagUrl}
+                            alt={server.countryName || ""}
+                            width={28}
+                            height={28}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : server?.countryIso ? (
+                          <span className="text-sm">
+                            {getCountryFlagEmoji(server.countryIso)}
+                          </span>
+                        ) : (
+                          <Globe size={13} className="text-muted-foreground" />
+                        )}
+                      </div>
+                      <p className="text-xs font-mono font-semibold flex-1 truncate">
+                        {num.phoneNumber}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground shrink-0 max-w-[60px] truncate">
+                        {num.service?.name || "Unknown"}
+                      </p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[9px] font-semibold px-1.5 py-0 h-4 rounded-full shrink-0",
+                          isCompleted
+                            ? "border-green-500/40 text-green-500 bg-green-500/5"
+                            : isCancelled
+                              ? "border-destructive/40 text-destructive bg-destructive/5"
+                              : "border-amber-500/40 text-amber-500 bg-amber-500/5",
+                        )}
+                      >
+                        {statusLabel}
+                      </Badge>
+                    </motion.div>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center py-8 gap-2">
+                  <Hash size={22} className="text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">No numbers yet</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    Pick a service above to get started
+                  </p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </motion.div>
       </div>
 
