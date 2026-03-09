@@ -26,7 +26,7 @@ INSERT INTO "ApiCredential" (
   'maya',                           -- ← CHANGE THIS: your CattySMS API key
   true, NOW(), NOW()
 )
-ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "code" = EXCLUDED."code", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
+ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
 
 
 -- ============================================================
@@ -40,7 +40,7 @@ INSERT INTO "OtpServer" (
   'india', 'India', '22', 'IN', 'India',
   NULL, 'cattysms', true, NOW(), NOW()
 )
-ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "code" = EXCLUDED."code", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
+ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
 
 
 -- ============================================================
@@ -339,7 +339,6 @@ INSERT INTO "Service" (
 ('private1',        'private1',       'Private -1',          'india',  6.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('vip777',          'vip777',         'VIP-777',             'india',  8.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('spinkaro',        'spinkaro',       'Spinkaro',            'india',  9.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
-('maha-luck',       'mahaluck',       'Maha Luck',           'india',  5.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('facebook2',       'facebook2',      'Facebook2',           'india',  7.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('smple',           'simple',         'Simple Pay',          'india',  6.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('rohini',          'rohini',         'Rohini',              'india',  8.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
@@ -350,7 +349,7 @@ INSERT INTO "Service" (
 -- TEST
 ('test-service',    'TEST',           'Test Service',        'india',  5.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW())
 
-ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "code" = EXCLUDED."code", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
+ON CONFLICT ("code", "serverId") DO UPDATE SET "name" = EXCLUDED."name", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
 
 
 -- ============================================================
