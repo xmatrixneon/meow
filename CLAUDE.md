@@ -139,8 +139,9 @@ The project uses **tRPC** with **React Query** for type-safe API communication.
 ### Server-side tRPC (`lib/trpc/trpc.ts`)
 - **Context**: Created with `createTRPCContext()` - extracts session from Better Auth cookies
 - **Procedures**: `publicProcedure` (no auth), `protectedProcedure` (requires authenticated user)
-- **Transformer**: Uses `superjson` for automatic serialization
+- **Transformer**: Uses `superjson` for automatic serialization (Date, BigInt, Map, Set, undefined preserved)
 - **Error handling**: Formats Zod errors with flattened output
+- **Both client and server must use the same transformer** - superjson is configured in both `trpc.ts` (server) and `provider.tsx` (client)
 
 ### tRPC Routers (`lib/trpc/routers/`)
 - **_app.ts**: Main router merging all feature routers
@@ -157,6 +158,12 @@ The project uses **tRPC** with **React Query** for type-safe API communication.
 - Exports `trpc` client created with `createTRPCReact<AppRouter>()`
 - Integration with TanStack Query for caching and state management
 
+### tRPC Provider (`lib/trpc/provider.tsx`)
+- `TRPCProvider` component wraps the app with tRPC and React Query providers
+- Configures `httpBatchLink` with superjson transformer
+- Includes error handling for non-JSON responses
+- QueryClient: 5-minute stale time, no refetch on window focus
+
 ### Usage Example
 ```tsx
 import { trpc } from "@/lib/trpc/client";
@@ -172,6 +179,102 @@ function MyComponent() {
 
 ### Debug Mode
 Set `DEBUG_TRPC=1` in `.env` to enable tRPC request logging in development.
+
+## OTP Provider Client
+
+The project includes an OTP provider client for communicating with external SMS/OTP APIs.
+
+### Module (`lib/providers/`)
+- **client.ts**: `OtpProviderClient` class for API communication
+- **types.ts**: Type definitions and error messages
+- **index.ts**: Exports client, types, and error messages
+
+### Key Methods
+- `getNumber(service, country)`: Purchase a phone number for receiving SMS
+- `getStatus(id)`: Check SMS delivery status (WAITING/RECEIVED/CANCELLED)
+- `setStatus(id, status)`: Update order status (cancel=8, finish=6, get next SMS=3)
+- `getNextSms(id)`: Request another SMS for multi-SMS support
+- `getBalance()`: Check upstream provider balance
+
+### API Format
+- Path: `/stubs/handler_api.php` (configurable via `apiPath`)
+- Params: `api_key`, `action`, and action-specific parameters
+- Response formats: Plain text with prefixes (e.g., `ACCESS_NUMBER:id:phone`)
+
+### Error Handling
+- Known error codes mapped via `OTP_ERROR_MESSAGES`
+- Network errors return safe defaults (e.g., WAITING status) to avoid crashing pollers
+
+## Infinite Scroll Pattern
+
+The app uses cursor-based pagination for infinite scrolling on list pages.
+
+### Server-side (tRPC Routers)
+```typescript
+// Cursor-based pagination schema
+const historySchema = z.object({
+  limit: z.number().min(1).max(100).default(20),
+  cursor: z.string().optional(), // ISO date string
+});
+
+// Query pattern
+const items = await prisma.model.findMany({
+  where: {
+    userId,
+    ...(cursor && { createdAt: { lt: new Date(cursor) } }),
+  },
+  orderBy: { createdAt: "desc" },
+  take: limit + 1, // Fetch one extra to determine hasMore
+});
+
+// Return cursor for next page
+let nextCursor: string | null = null;
+if (items.length > limit) {
+  items.pop(); // Remove extra item
+  nextCursor = items[items.length - 1].createdAt.toISOString();
+}
+return { items, nextCursor };
+```
+
+### Client-side (React Components)
+```typescript
+// Use tRPC infinite query
+const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  trpc.resource.listInfinite.useInfiniteQuery(
+    { limit: 20 },
+    { getNextPageParam: (page) => page.nextCursor }
+  );
+
+// Flatten pages
+const items = useMemo(() =>
+  data?.pages.flatMap((page) => page.items) ?? [],
+[data]);
+
+// Intersection Observer for auto-loading
+const loadMoreRef = useRef<HTMLDivElement>(null);
+useEffect(() => {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    { threshold: 0.1, rootMargin: "100px" }
+  );
+  if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+  return () => observer.disconnect();
+}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+// Sentinel element in JSX
+<div ref={loadMoreRef}>
+  {isFetchingNextPage && <Spinner />}
+</div>
+```
+
+### Endpoints Using Infinite Scroll
+- `wallet.transactionsInfinite`: Transaction history
+- `number.getReceivedInfinite`: Completed numbers
+- `number.getCancelledInfinite`: Cancelled numbers
 
 ## Bot Integration
 
@@ -347,7 +450,7 @@ This pattern provides a type-safe state machine for authentication flows with cl
 - **@trpc/react-query** (11.10.0): tRPC + TanStack Query integration
 - **@tanstack/react-query** (5.90.21): Data fetching and caching
 - **zod** (4.3.6): Schema validation
-- **superjson** (2.2.6): tRPC data transformer
+- **superjson** (2.2.6): tRPC data transformer for Date, BigInt, Map, Set serialization
 
 ### Database
 - **prisma** (7.4.1): TypeScript ORM
