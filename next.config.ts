@@ -24,6 +24,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.telegram.org",
       },
+      {
+        protocol: "https",
+        hostname: "**", // allows all HTTPS sources for service icons
+      },
     ],
   },
   async rewrites() {
