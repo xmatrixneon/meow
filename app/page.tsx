@@ -121,7 +121,13 @@ function ServiceCard({
     >
       <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors overflow-hidden">
         {service.iconUrl ? (
-          <img src={service.iconUrl} alt={service.name} className="w-4 h-4 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          <Image
+            src={service.iconUrl}
+            alt={service.name}
+            width={28}
+            height={28}
+            className="w-full h-full object-contain p-0.5"
+          />
         ) : (
           <Phone size={13} strokeWidth={2.2} className="text-primary" />
         )}
@@ -136,7 +142,10 @@ function ServiceCard({
           </p>
         )}
       </div>
-      <ChevronRight size={12} className="text-muted-foreground/40 shrink-0 group-hover:text-primary/50 transition-colors" />
+      <ChevronRight
+        size={12}
+        className="text-muted-foreground/40 shrink-0 group-hover:text-primary/50 transition-colors"
+      />
     </motion.button>
   );
 }
@@ -183,18 +192,29 @@ function ServerCard({
                   width={40}
                   height={40}
                   className="w-full h-full object-cover"
-                  unoptimized
                 />
               ) : server.countryIso ? (
-                <span className="text-xl">{getCountryFlagEmoji(server.countryIso)}</span>
+                <span className="text-xl">
+                  {getCountryFlagEmoji(server.countryIso)}
+                </span>
               ) : (
-                <Server size={16} strokeWidth={2} className="text-muted-foreground" />
+                <Server
+                  size={16}
+                  strokeWidth={2}
+                  className="text-muted-foreground"
+                />
               )}
             </div>
             <div>
-              <p className="font-bold text-sm text-foreground leading-tight">{server.name}</p>
+              <p className="font-bold text-sm text-foreground leading-tight">
+                {server.name}
+              </p>
               <div className="flex items-baseline gap-0.5 mt-0.5">
-                <IndianRupee size={12} strokeWidth={2.5} className="text-primary mb-px" />
+                <IndianRupee
+                  size={12}
+                  strokeWidth={2.5}
+                  className="text-primary mb-px"
+                />
                 <span className="text-xl font-black text-primary tabular-nums leading-none">
                   {price.toFixed(2)}
                 </span>
@@ -222,11 +242,17 @@ function ServerCard({
         <div className="grid grid-cols-3 gap-2">
           <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
             <div className="flex items-center gap-1">
-              {lowStock && <AlertCircle size={10} className="text-amber-500" />}
+              {lowStock && (
+                <AlertCircle size={10} className="text-amber-500" />
+              )}
               <span
                 className={cn(
                   "text-sm font-bold tabular-nums",
-                  outOfStock ? "text-muted-foreground" : lowStock ? "text-amber-500" : "text-foreground",
+                  outOfStock
+                    ? "text-muted-foreground"
+                    : lowStock
+                      ? "text-amber-500"
+                      : "text-foreground",
                 )}
               >
                 {server.stock}
@@ -246,7 +272,9 @@ function ServerCard({
           <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
             <div className="flex items-center gap-1">
               <Clock size={10} className="text-sky-500" />
-              <span className="text-sm font-bold text-sky-500">{server.avgTime}</span>
+              <span className="text-sm font-bold text-sky-500">
+                {server.avgTime}
+              </span>
             </div>
             <span className="text-[10px] text-muted-foreground">Avg time</span>
           </div>
@@ -295,7 +323,10 @@ export default function MiniAppPage() {
       } else {
         setAccumulatedServices((prev) => {
           const existingIds = new Set(prev.map((s) => s.id));
-          return [...prev, ...newServices.filter((s) => !existingIds.has(s.id))];
+          return [
+            ...prev,
+            ...newServices.filter((s) => !existingIds.has(s.id)),
+          ];
         });
       }
     }
@@ -315,8 +346,13 @@ export default function MiniAppPage() {
     return () => observer.disconnect();
   }, [servicesData?.hasMore, isFetching]);
 
-  const { data: serversData } = trpc.service.servers.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
-  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(undefined, { staleTime: 60 * 1000 });
+  const { data: serversData } = trpc.service.servers.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: recentNumbersData } = trpc.number.getRecent.useQuery(
+    undefined,
+    { staleTime: 60 * 1000 },
+  );
   const utils = trpc.useUtils();
 
   const buyMutation = trpc.number.buy.useMutation({
@@ -422,7 +458,10 @@ export default function MiniAppPage() {
           transition={{ type: "spring", stiffness: 300, damping: 28 }}
           className="relative"
         >
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Search
+            size={15}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          />
           <Input
             placeholder="Search service — Telegram, Google…"
             value={search}
@@ -477,7 +516,9 @@ export default function MiniAppPage() {
                   >
                     <Hash size={24} className="text-muted-foreground/30" />
                     <p className="text-sm text-muted-foreground">
-                      {debouncedSearch ? "No services found" : "Loading services…"}
+                      {debouncedSearch
+                        ? "No services found"
+                        : "Loading services…"}
                     </p>
                   </motion.div>
                 ) : (
@@ -499,7 +540,11 @@ export default function MiniAppPage() {
                   {isFetching && (
                     <motion.div
                       animate={{ rotate: 360 }}
-                      transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                      transition={{
+                        duration: 0.8,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
                       className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
                     />
                   )}
@@ -517,7 +562,9 @@ export default function MiniAppPage() {
           className="bg-card border border-border rounded-xl overflow-hidden"
         >
           <div className="flex items-center justify-between px-4 pt-2">
-            <p className="text-sm font-semibold text-foreground">Recent Numbers</p>
+            <p className="text-sm font-semibold text-foreground">
+              Recent Numbers
+            </p>
             <button
               type="button"
               onClick={() => router.push("/numbers")}
@@ -528,12 +575,17 @@ export default function MiniAppPage() {
           </div>
 
           <div className="px-3 pb-3 space-y-1.5">
-            {recentNumbersData?.numbers && recentNumbersData.numbers.length > 0 ? (
+            {recentNumbersData?.numbers &&
+            recentNumbersData.numbers.length > 0 ? (
               recentNumbersData.numbers.map((num, i) => {
                 const server = num.service?.server;
                 const isCompleted = num.status === "COMPLETED";
                 const isCancelled = num.status === "CANCELLED";
-                const statusLabel = isCompleted ? "Received" : isCancelled ? "Cancelled" : "Waiting";
+                const statusLabel = isCompleted
+                  ? "Received"
+                  : isCancelled
+                    ? "Cancelled"
+                    : "Waiting";
 
                 return (
                   <motion.div
@@ -546,14 +598,24 @@ export default function MiniAppPage() {
                   >
                     <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
                       {server?.flagUrl ? (
-                        <Image src={server.flagUrl} alt={server.countryName || ""} width={28} height={28} className="w-full h-full object-cover" unoptimized />
+                        <Image
+                          src={server.flagUrl}
+                          alt={server.countryName || ""}
+                          width={28}
+                          height={28}
+                          className="w-full h-full object-cover"
+                        />
                       ) : server?.countryIso ? (
-                        <span className="text-sm">{getCountryFlagEmoji(server.countryIso)}</span>
+                        <span className="text-sm">
+                          {getCountryFlagEmoji(server.countryIso)}
+                        </span>
                       ) : (
                         <Globe size={13} className="text-muted-foreground" />
                       )}
                     </div>
-                    <p className="text-xs font-mono font-semibold flex-1 truncate">{num.phoneNumber}</p>
+                    <p className="text-xs font-mono font-semibold flex-1 truncate">
+                      {num.phoneNumber}
+                    </p>
                     <p className="text-[10px] text-muted-foreground shrink-0 max-w-[60px] truncate">
                       {num.service?.name || "Unknown"}
                     </p>
@@ -577,7 +639,9 @@ export default function MiniAppPage() {
               <div className="flex flex-col items-center py-8 gap-2">
                 <Hash size={22} className="text-muted-foreground/30" />
                 <p className="text-sm text-muted-foreground">No numbers yet</p>
-                <p className="text-xs text-muted-foreground/60">Pick a service above to get started</p>
+                <p className="text-xs text-muted-foreground/60">
+                  Pick a service above to get started
+                </p>
               </div>
             )}
           </div>
@@ -586,18 +650,33 @@ export default function MiniAppPage() {
 
       {/* Server selection sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[80vh] flex flex-col px-0 pb-0">
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl max-h-[80vh] flex flex-col px-0 pb-0"
+        >
           <SheetHeader className="px-5 pt-4 pb-3 border-b border-border shrink-0">
             <SheetTitle className="flex items-center gap-3 text-left">
               <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
                 {selected?.iconUrl ? (
-                  <img src={selected.iconUrl} alt={selected.name} className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  <Image
+                    src={selected.iconUrl}
+                    alt={selected.name}
+                    width={36}
+                    height={36}
+                    className="w-full h-full object-contain p-1"
+                  />
                 ) : (
-                  <Phone size={15} strokeWidth={2.2} className="text-primary" />
+                  <Phone
+                    size={15}
+                    strokeWidth={2.2}
+                    className="text-primary"
+                  />
                 )}
               </div>
               <div>
-                <p className="font-bold text-base leading-tight">{selected?.name}</p>
+                <p className="font-bold text-base leading-tight">
+                  {selected?.name}
+                </p>
                 <p className="text-xs text-muted-foreground font-normal mt-0.5">
                   Choose a server below
                 </p>
@@ -624,10 +703,16 @@ export default function MiniAppPage() {
                     >
                       <motion.div
                         animate={{ rotate: 360 }}
-                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
                         className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
                       />
-                      <span className="text-sm font-medium">Assigning number…</span>
+                      <span className="text-sm font-medium">
+                        Assigning number…
+                      </span>
                     </motion.div>
                   )}
                 </AnimatePresence>
