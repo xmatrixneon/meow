@@ -37,7 +37,7 @@ interface SmsEntry { content: string; receivedAt: string; }
 interface TempNumber {
   id: string; orderId: string; number: string; country: string;
   countryCode: string; countryIso?: string | null; countryFlag?: string | null;
-  service: string; serviceId?: string; serverId?: string; status: TabValue;
+  service: string; serviceIcon?: string | null; serviceId?: string; serverId?: string; status: TabValue;
   smsReceived: boolean; expiresAt: Date; sms?: string; smsList?: SmsEntry[];
   code?: string; buyTime: Date;
 }
@@ -236,7 +236,11 @@ function NumberCard({ item, delay, onCancel, minCancelMs, onNextNumber, buyingNe
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-            <MessageSquare size={10} />
+            {item.serviceIcon ? (
+              <img src={item.serviceIcon} alt={item.service} className="w-4 h-4 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            ) : (
+              <MessageSquare size={10} />
+            )}
             {item.service}
             {item.country && item.country !== "Unknown" && (
               <><span className="opacity-40">·</span>{item.country}</>
@@ -262,7 +266,15 @@ function NumberCard({ item, delay, onCancel, minCancelMs, onNextNumber, buyingNe
             <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
           </span>
           <p className="text-xs text-muted-foreground">
-            Waiting for SMS from <span className="font-medium text-foreground">{item.service}</span>…
+            Waiting for SMS from{" "}
+            {item.serviceIcon ? (
+              <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                <img src={item.serviceIcon} alt={item.service} className="w-3.5 h-3.5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                {item.service}
+              </span>
+            ) : (
+              <span className="font-medium text-foreground">{item.service}</span>
+            )}…
           </p>
         </div>
       )}
@@ -394,7 +406,8 @@ export default function NumbersPage() {
       id: n.id, orderId: n.orderId, number: n.phoneNumber,
       country: server?.countryName ?? "Unknown", countryCode: server?.countryCode ?? "",
       countryIso: server?.countryIso ?? "", countryFlag: server?.flagUrl,
-      service: n.service?.name ?? "Unknown", serviceId: n.serviceId, serverId: n.serverId,
+      service: n.service?.name ?? "Unknown", serviceIcon: n.service?.iconUrl,
+      serviceId: n.serviceId, serverId: n.serverId,
       status: "waiting" as TabValue, smsReceived: (n.status as string) === "COMPLETED",
       expiresAt: new Date(n.expiresAt), sms: displaySms, smsList,
       code: extractOTP(displaySms ?? smsList), buyTime: new Date(n.createdAt),
@@ -408,7 +421,8 @@ export default function NumbersPage() {
       id: n.id, orderId: n.orderId, number: n.phoneNumber,
       country: server?.countryName ?? "Unknown", countryCode: server?.countryCode ?? "",
       countryIso: server?.countryIso ?? "", countryFlag: server?.flagUrl,
-      service: n.service?.name ?? "Unknown", serviceId: n.serviceId, serverId: n.serverId,
+      service: n.service?.name ?? "Unknown", serviceIcon: n.service?.iconUrl,
+      serviceId: n.serviceId, serverId: n.serverId,
       status: "received" as TabValue, smsReceived: true, expiresAt: new Date(),
       sms: displaySms, smsList, code: extractOTP(displaySms ?? smsList), buyTime: new Date(n.createdAt),
     };
@@ -420,7 +434,8 @@ export default function NumbersPage() {
       id: n.id, orderId: n.orderId, number: n.phoneNumber,
       country: server?.countryName ?? "Unknown", countryCode: server?.countryCode ?? "",
       countryIso: server?.countryIso ?? "", countryFlag: server?.flagUrl,
-      service: n.service?.name ?? "Unknown", serviceId: n.serviceId, serverId: n.serverId,
+      service: n.service?.name ?? "Unknown", serviceIcon: n.service?.iconUrl,
+      serviceId: n.serviceId, serverId: n.serverId,
       status: "cancelled" as TabValue, smsReceived: false, expiresAt: new Date(),
       sms: undefined, smsList: undefined, code: undefined, buyTime: new Date(n.createdAt),
     };

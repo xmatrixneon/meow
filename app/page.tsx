@@ -52,6 +52,7 @@ interface Service {
   name: string;
   emoji: string;
   category: string;
+  iconUrl?: string | null;
 }
 
 interface ServerOption {
@@ -118,8 +119,12 @@ function ServiceCard({
       onClick={onClick}
       className="flex items-center gap-2.5 px-3 py-2.5 w-full bg-background border border-border rounded-xl hover:border-primary/60 hover:bg-accent transition-all duration-150 group text-left"
     >
-      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-        <Phone size={13} strokeWidth={2.2} className="text-primary" />
+      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors overflow-hidden">
+        {service.iconUrl ? (
+          <img src={service.iconUrl} alt={service.name} className="w-4 h-4 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        ) : (
+          <Phone size={13} strokeWidth={2.2} className="text-primary" />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold text-foreground truncate leading-tight">
@@ -283,6 +288,7 @@ export default function MiniAppPage() {
         name: s.name,
         emoji: String(s.basePrice ?? ""),
         category: "Service",
+        iconUrl: s.iconUrl,
       }));
       if (serviceOffset === 0) {
         setAccumulatedServices(newServices);
@@ -583,8 +589,12 @@ export default function MiniAppPage() {
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[80vh] flex flex-col px-0 pb-0">
           <SheetHeader className="px-5 pt-4 pb-3 border-b border-border shrink-0">
             <SheetTitle className="flex items-center gap-3 text-left">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <Phone size={15} strokeWidth={2.2} className="text-primary" />
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                {selected?.iconUrl ? (
+                  <img src={selected.iconUrl} alt={selected.name} className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : (
+                  <Phone size={15} strokeWidth={2.2} className="text-primary" />
+                )}
               </div>
               <div>
                 <p className="font-bold text-base leading-tight">{selected?.name}</p>

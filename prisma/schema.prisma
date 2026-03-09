@@ -211,7 +211,7 @@ model Service {
   name         String
   serverId     String
   basePrice    Decimal       @db.Decimal(10, 2)
-  iconUrl      String?
+  iconUrl      String        @default("https://i.ibb.co/kgBcLZsX/meow.png")
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
