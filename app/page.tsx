@@ -111,41 +111,78 @@ function ServiceCard({
 
   return (
     <motion.button
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 28, delay }}
-      whileTap={{ scale: 0.97 }}
+      initial={{ opacity: 0, scale: 0.95, y: 8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{
+        type: "spring",
+        stiffness: 400,
+        damping: 28,
+        delay
+      }}
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2.5 px-3 py-2.5 w-full bg-background border border-border rounded-xl hover:border-primary/60 hover:bg-accent transition-all duration-150 group text-left"
+      className="relative group text-left overflow-hidden"
     >
-      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors overflow-hidden">
-        {service.iconUrl ? (
-          <Image
-            src={service.iconUrl}
-            alt={service.name}
-            width={28}
-            height={28}
-            className="w-full h-full object-contain p-0.5"
-          />
-        ) : (
-          <Phone size={13} strokeWidth={2.2} className="text-primary" />
-        )}
+      {/* Gradient border effect */}
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/20 via-transparent to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+      {/* Main card */}
+      <div className="relative bg-gradient-to-br from-card via-card to-muted/30 border border-border/60 rounded-2xl p-3.5 group-hover:border-primary/40 group-hover:shadow-lg group-hover:shadow-primary/5 transition-all duration-300">
+        {/* Top accent line */}
+        <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+        <div className="flex items-start gap-3">
+          {/* Icon container */}
+          <div className="relative shrink-0">
+            <div className="absolute inset-0 bg-primary/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative w-11 h-11 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/10 flex items-center justify-center overflow-hidden group-hover:from-primary/25 group-hover:to-primary/10 transition-all duration-300">
+              {service.iconUrl ? (
+                <Image
+                  src={service.iconUrl}
+                  alt={service.name}
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Phone size={16} strokeWidth={2.5} className="text-primary" />
+              )}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0 pt-0.5 flex flex-col justify-center">
+            <p className="text-sm font-bold text-foreground leading-tight tracking-tight group-hover:text-primary transition-colors duration-300 line-clamp-2">
+              {service.name}
+            </p>
+
+            {/* Price tag */}
+            {priceStr && (
+              <div className="flex items-center gap-1 mt-1.5">
+                <div className="flex items-center bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-0.5">
+                  <span className="text-[10px] font-bold text-emerald-400">₹</span>
+                  <span className="text-xs font-bold text-emerald-400 tabular-nums ml-0.5">
+                    {priceStr}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Arrow indicator */}
+          <div className="shrink-0 self-center">
+            <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors duration-300">
+              <ChevronRight
+                size={14}
+                strokeWidth={2.5}
+                className="text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-300"
+              />
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-foreground truncate leading-tight">
-          {service.name}
-        </p>
-        {priceStr && (
-          <p className="text-[11px] font-bold text-primary tabular-nums">
-            ₹{priceStr}
-          </p>
-        )}
-      </div>
-      <ChevronRight
-        size={12}
-        className="text-muted-foreground/40 shrink-0 group-hover:text-primary/50 transition-colors"
-      />
     </motion.button>
   );
 }
@@ -173,77 +210,96 @@ function ServerCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 280, damping: 26 }}
+      transition={{ type: "spring", stiffness: 300, damping: 28 }}
+      whileHover={{ scale: outOfStock ? 1 : 1.01 }}
       className={cn(
-        "bg-card border rounded-xl",
-        outOfStock ? "border-border/50 opacity-60" : "border-border",
+        "relative overflow-hidden rounded-2xl border transition-all duration-300",
+        outOfStock
+          ? "border-border/30 opacity-50"
+          : "border-border/60 hover:border-primary/30",
       )}
     >
-      <div className="p-4">
-        <div className="flex items-center justify-between gap-3 mb-4">
+      {/* Background gradient */}
+      <div className={cn(
+        "absolute inset-0 bg-gradient-to-br transition-opacity duration-300",
+        outOfStock
+          ? "from-muted/30 to-muted/10"
+          : "from-card via-card to-muted/20"
+      )} />
+
+      {/* Top accent */}
+      {!outOfStock && (
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+      )}
+
+      <div className="relative p-4">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          {/* Server info with flag */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 overflow-hidden border border-border/50">
-              {server.flagUrl ? (
-                <Image
-                  src={server.flagUrl}
-                  alt={server.countryName || server.countryCode}
-                  width={40}
-                  height={40}
-                  className="w-full h-full object-cover"
-                />
-              ) : server.countryIso ? (
-                <span className="text-xl">
-                  {getCountryFlagEmoji(server.countryIso)}
-                </span>
-              ) : (
-                <Server
-                  size={16}
-                  strokeWidth={2}
-                  className="text-muted-foreground"
-                />
-              )}
+            <div className="relative">
+              <div className={cn(
+                "absolute inset-0 rounded-xl blur-lg transition-opacity duration-300",
+                outOfStock ? "opacity-0" : "opacity-50 bg-primary/20"
+              )} />
+              <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-muted to-muted/50 border border-border/40 flex items-center justify-center overflow-hidden">
+                {server.flagUrl ? (
+                  <Image
+                    src={server.flagUrl}
+                    alt={server.countryName || server.countryCode}
+                    width={48}
+                    height={48}
+                    className="w-full h-full object-cover"
+                  />
+                ) : server.countryIso ? (
+                  <span className="text-2xl">
+                    {getCountryFlagEmoji(server.countryIso)}
+                  </span>
+                ) : (
+                  <Server
+                    size={18}
+                    strokeWidth={2}
+                    className="text-muted-foreground"
+                  />
+                )}
+              </div>
             </div>
-            <div>
-              <p className="font-bold text-sm text-foreground leading-tight">
+
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-foreground leading-tight truncate">
                 {server.name}
               </p>
-              <div className="flex items-baseline gap-0.5 mt-0.5">
-                <IndianRupee
-                  size={12}
-                  strokeWidth={2.5}
-                  className="text-primary mb-px"
-                />
-                <span className="text-xl font-black text-primary tabular-nums leading-none">
-                  {price.toFixed(2)}
-                </span>
-              </div>
+              {/* Service name if available */}
+              {selectedService?.name && (
+                <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate">
+                  {selectedService.name}
+                </p>
+              )}
             </div>
           </div>
 
-          <Button
-            size="sm"
-            disabled={outOfStock}
-            onClick={onBuy}
-            className="rounded-lg h-9 px-4 text-xs font-semibold shrink-0"
-          >
-            {outOfStock ? (
-              "Sold out"
-            ) : (
-              <span className="flex items-center gap-1.5">
-                <ShoppingCart size={13} />
-                Buy
+          {/* Price display */}
+          <div className="text-right shrink-0">
+            <div className="flex items-center justify-end gap-0.5">
+              <IndianRupee
+                size={14}
+                strokeWidth={3}
+                className="text-emerald-400"
+              />
+              <span className="text-2xl font-black text-emerald-400 tabular-nums leading-none tracking-tight">
+                {price.toFixed(2)}
               </span>
-            )}
-          </Button>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="flex flex-col items-center gap-1 bg-muted/40 rounded-xl py-2.5 border border-border/30">
             <div className="flex items-center gap-1">
               {lowStock && (
-                <AlertCircle size={10} className="text-amber-500" />
+                <AlertCircle size={11} className="text-amber-400" />
               )}
               <span
                 className={cn(
@@ -251,34 +307,59 @@ function ServerCard({
                   outOfStock
                     ? "text-muted-foreground"
                     : lowStock
-                      ? "text-amber-500"
+                      ? "text-amber-400"
                       : "text-foreground",
                 )}
               >
                 {server.stock}
               </span>
             </div>
-            <span className="text-[10px] text-muted-foreground">Stock</span>
+            <span className="text-[10px] text-muted-foreground font-medium">Stock</span>
           </div>
-          <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
+          <div className="flex flex-col items-center gap-1 bg-muted/40 rounded-xl py-2.5 border border-border/30">
             <div className="flex items-center gap-1">
-              <CheckCircle2 size={10} className="text-green-500" />
-              <span className="text-sm font-bold text-green-500 tabular-nums">
+              <CheckCircle2 size={11} className="text-emerald-400" />
+              <span className="text-sm font-bold text-emerald-400 tabular-nums">
                 {server.successRate}%
               </span>
             </div>
-            <span className="text-[10px] text-muted-foreground">Success</span>
+            <span className="text-[10px] text-muted-foreground font-medium">Success</span>
           </div>
-          <div className="flex flex-col items-center gap-0.5 bg-muted/50 rounded-lg py-2">
+          <div className="flex flex-col items-center gap-1 bg-muted/40 rounded-xl py-2.5 border border-border/30">
             <div className="flex items-center gap-1">
-              <Clock size={10} className="text-sky-500" />
-              <span className="text-sm font-bold text-sky-500">
+              <Clock size={11} className="text-sky-400" />
+              <span className="text-sm font-bold text-sky-400">
                 {server.avgTime}
               </span>
             </div>
-            <span className="text-[10px] text-muted-foreground">Avg time</span>
+            <span className="text-[10px] text-muted-foreground font-medium">Avg time</span>
           </div>
         </div>
+
+        {/* Buy button */}
+        <Button
+          size="sm"
+          disabled={outOfStock}
+          onClick={onBuy}
+          className={cn(
+            "w-full rounded-xl h-10 text-xs font-bold transition-all duration-300",
+            outOfStock
+              ? "bg-muted text-muted-foreground"
+              : "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg shadow-primary/20"
+          )}
+        >
+          {outOfStock ? (
+            <span className="flex items-center gap-1.5">
+              <AlertCircle size={14} />
+              Sold Out
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <ShoppingCart size={14} />
+              Buy Now
+            </span>
+          )}
+        </Button>
       </div>
     </motion.div>
   );
@@ -490,68 +571,86 @@ export default function MiniAppPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 28, delay: 0.06 }}
         >
-          <div className="flex items-center justify-between mb-2.5 px-0.5">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              {debouncedSearch ? `"${debouncedSearch}"` : "Choose a service"}
-            </p>
+          {/* Section Header */}
+          <div className="flex items-center justify-between mb-3 px-0.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  {debouncedSearch ? `"${debouncedSearch}"` : "Services"}
+                </p>
+              </div>
+              {servicesData?.total !== undefined && (
+                <Badge className="text-[9px] font-bold px-2 py-0 h-5 rounded-md bg-primary/15 text-primary border border-primary/20">
+                  {servicesData.total}
+                </Badge>
+              )}
+            </div>
             {isFetching && (
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="w-3 h-3 rounded-full border-2 border-primary/30 border-t-primary"
+                className="w-3.5 h-3.5 rounded-full border-2 border-primary/30 border-t-primary"
               />
             )}
           </div>
 
-          <ScrollArea className="h-[260px] w-full rounded-xl border border-border bg-card">
-            <div className="p-2.5">
-              <AnimatePresence mode="popLayout">
-                {services.length === 0 ? (
-                  <motion.div
-                    key="empty"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex flex-col items-center py-12 gap-2"
-                  >
-                    <Hash size={24} className="text-muted-foreground/30" />
-                    <p className="text-sm text-muted-foreground">
-                      {debouncedSearch
-                        ? "No services found"
-                        : "Loading services…"}
-                    </p>
-                  </motion.div>
-                ) : (
-                  <motion.div key="grid" className="grid grid-cols-2 gap-1.5">
-                    {services.map((service, i) => (
-                      <ServiceCard
-                        key={service.id}
-                        service={service}
-                        onClick={() => handleSelectService(service)}
-                        delay={Math.min(i * 0.025, 0.3)}
-                      />
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          {/* Services Grid Container */}
+          <div className="relative rounded-2xl border border-border/50 bg-gradient-to-b from-card/80 to-card overflow-hidden">
+            {/* Subtle top glow */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
-              {servicesData?.hasMore && (
-                <div ref={loadMoreRef} className="flex justify-center py-3">
-                  {isFetching && (
+            <ScrollArea className="h-[280px] w-full">
+              <div className="p-3">
+                <AnimatePresence mode="popLayout">
+                  {services.length === 0 ? (
                     <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{
-                        duration: 0.8,
-                        repeat: Infinity,
-                        ease: "linear",
-                      }}
-                      className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
-                    />
+                      key="empty"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-col items-center py-12 gap-2"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center">
+                        <Hash size={22} className="text-muted-foreground/40" />
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {debouncedSearch
+                          ? "No services found"
+                          : "Loading services…"}
+                      </p>
+                    </motion.div>
+                  ) : (
+                    <motion.div key="grid" className="grid grid-cols-2 gap-2">
+                      {services.map((service, i) => (
+                        <ServiceCard
+                          key={service.id}
+                          service={service}
+                          onClick={() => handleSelectService(service)}
+                          delay={Math.min(i * 0.03, 0.4)}
+                        />
+                      ))}
+                    </motion.div>
                   )}
-                </div>
-              )}
-            </div>
-          </ScrollArea>
+                </AnimatePresence>
+
+                {servicesData?.hasMore && (
+                  <div ref={loadMoreRef} className="flex justify-center py-4">
+                    {isFetching && (
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
+                        className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
         </motion.div>
 
         {/* Recent Numbers */}
@@ -656,33 +755,48 @@ export default function MiniAppPage() {
           side="bottom"
           className="rounded-t-2xl max-h-[80vh] flex flex-col px-0 pb-0"
         >
-          <SheetHeader className="px-5 pt-4 pb-3 border-b border-border shrink-0">
-            <SheetTitle className="flex items-center gap-3 text-left">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-                {selected?.iconUrl ? (
-                  <Image
-                    src={selected.iconUrl}
-                    alt={selected.name}
-                    width={36}
-                    height={36}
-                    className="w-full h-full object-contain p-1"
-                  />
-                ) : (
-                  <Phone
-                    size={15}
-                    strokeWidth={2.2}
-                    className="text-primary"
-                  />
-                )}
+          <SheetHeader className="px-5 pt-5 pb-4 border-b border-border/50 shrink-0 bg-gradient-to-b from-card to-transparent">
+            <SheetTitle className="flex items-center gap-4 text-left">
+              <div className="relative">
+                <div className="absolute inset-0 bg-primary/30 rounded-xl blur-xl" />
+                <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center overflow-hidden">
+                  {selected?.iconUrl ? (
+                    <Image
+                      src={selected.iconUrl}
+                      alt={selected.name}
+                      width={44}
+                      height={44}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Phone
+                      size={18}
+                      strokeWidth={2.5}
+                      className="text-primary"
+                    />
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-base leading-tight">
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-lg text-foreground leading-tight tracking-tight truncate">
                   {selected?.name}
                 </p>
-                <p className="text-xs text-muted-foreground font-normal mt-0.5">
-                  Choose a server below
+                <p className="text-xs text-muted-foreground font-medium mt-1">
+                  Select a server to purchase
                 </p>
               </div>
+              {/* Price badge */}
+              {selected && (
+                <div className="flex items-center gap-1 bg-gradient-to-r from-emerald-500/20 to-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-1.5">
+                  <IndianRupee size={12} strokeWidth={3} className="text-emerald-400" />
+                  <span className="text-sm font-bold text-emerald-300 tabular-nums">
+                    {(() => {
+                      const price = Number(selected.emoji);
+                      return price > 0 ? (price % 1 === 0 ? String(price) : price.toFixed(2)) : "—";
+                    })()}
+                  </span>
+                </div>
+              )}
             </SheetTitle>
           </SheetHeader>
 

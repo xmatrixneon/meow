@@ -98,7 +98,8 @@
       "Bash(ls -la /var/www/manager/.env* 2>/dev/null || echo \"No .env files found\")",
       "Bash(pm2 show meowsms-fetch 2>&1 | grep -E \"\\(script path|exec cwd|pwd\\)\")",
       "Bash(pm2 restart meowsms-fetch && sleep 3 && pm2 status meowsms-fetch)",
-      "Bash(pm2 logs meowsms-fetch --lines 10 --nostream 2>&1)"
+      "Bash(pm2 logs meowsms-fetch --lines 10 --nostream 2>&1)",
+      "Bash(pm2 reload ecosystem.config.js)"
     ]
   }
 }
