@@ -198,7 +198,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   }
 
   const settings = await prisma.settings.findUnique({ where: { id: "1" } });
-  const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 15;
+  const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 20;
 
   const service = await prisma.service.findFirst({
     where: {
