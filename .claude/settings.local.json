@@ -89,7 +89,16 @@
       "Bash(pm2 save)",
       "Bash(pm2 restart meowsms-web-1 meowsms-web-2 meowsms-web-3 2>&1 && pm2 list)",
       "Bash(pm2 delete meowsms-fetch 2>/dev/null; pm2 start ecosystem.config.js --only meowsms-fetch && pm2 save)",
-      "Bash(npm run build 2>&1 && pm2 restart meowsms-web-1 meowsms-web-2 meowsms-web-3 2>&1)"
+      "Bash(npm run build 2>&1 && pm2 restart meowsms-web-1 meowsms-web-2 meowsms-web-3 2>&1)",
+      "Bash(npx tsc --noEmit lib/rate-limiter.ts lib/trpc/routers/api-key.ts 2>&1 | head -50)",
+      "Bash(pm2 list)",
+      "Bash(pm2 restart ecosystem.config.js)",
+      "Bash(pm2 delete meowsms-fetch 2>/dev/null; pm2 list)",
+      "Bash(pm2 logs meowsms-fetch --lines 50 --nostream 2>&1)",
+      "Bash(ls -la /var/www/manager/.env* 2>/dev/null || echo \"No .env files found\")",
+      "Bash(pm2 show meowsms-fetch 2>&1 | grep -E \"\\(script path|exec cwd|pwd\\)\")",
+      "Bash(pm2 restart meowsms-fetch && sleep 3 && pm2 status meowsms-fetch)",
+      "Bash(pm2 logs meowsms-fetch --lines 10 --nostream 2>&1)"
     ]
   }
 }

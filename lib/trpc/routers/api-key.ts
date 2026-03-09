@@ -2,41 +2,23 @@ import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { prisma } from "@/lib/db";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
+import {
+  getRefreshRateLimitInfo,
+  consumeRefreshQuota,
+} from "@/lib/rate-limiter";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const COOLDOWN_MINUTES = 30;  // Must wait 30 min between refreshes
-const DAILY_LIMIT = 3;        // Max 3 refreshes per day
-const WEEKLY_LIMIT = 10;      // Max 10 refreshes per week
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Start of today in UTC (consistent across server restarts) */
-function startOfTodayUTC(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
-
-/** Start of current week (Monday) in UTC */
-function startOfThisWeekUTC(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  const day = d.getUTCDay(); // 0=Sun, 1=Mon...
-  const diff = day === 0 ? -6 : 1 - day; // roll back to Monday
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d;
-}
+const COOLDOWN_MINUTES = 30; // Must wait 30 min between refreshes
+const DAILY_LIMIT = 3; // Max 3 refreshes per day
+const WEEKLY_LIMIT = 10; // Max 10 refreshes per week
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const apiKeyRouter = createTRPCRouter({
   /**
    * Get or create the user's API key.
-   * Returns key info + all rate limit details so the UI can display them.
-   *
-   * FIX: weekly/daily counts are now derived from real refresh timestamps
-   * stored in UserApiRefreshLog, not a single counter that never resets.
+   * Returns key info + rate limit details from rate-limiter-flexible.
    */
   get: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
@@ -49,37 +31,20 @@ export const apiKeyRouter = createTRPCRouter({
       });
     }
 
-    const now = new Date();
-    const lastRefreshed = userApi.lastRefreshedAt ?? userApi.createdAt;
+    // Get rate limit info from rate-limiter-flexible
+    const rateLimitInfo = await getRefreshRateLimitInfo(userId);
 
-    // FIX (Bug 7 + 8): count from real log records — resets automatically
-    const [dailyCount, weeklyCount] = await Promise.all([
-      prisma.userApiRefreshLog.count({
-        where: { userId, createdAt: { gte: startOfTodayUTC() } },
-      }),
-      prisma.userApiRefreshLog.count({
-        where: { userId, createdAt: { gte: startOfThisWeekUTC() } },
-      }),
-    ]);
-
-    const msSinceLast = now.getTime() - lastRefreshed.getTime();
-    const cooldownMs = COOLDOWN_MINUTES * 60 * 1000;
-    const canRefresh =
-      msSinceLast >= cooldownMs &&
-      dailyCount < DAILY_LIMIT &&
-      weeklyCount < WEEKLY_LIMIT;
-
-    const cooldownRemaining = Math.max(0, Math.ceil((cooldownMs - msSinceLast) / 60_000));
+    const cooldownRemaining = Math.ceil(rateLimitInfo.cooldownRemainingMs / 60_000);
 
     return {
       apiKey: userApi.apiKey,
       isActive: userApi.isActive,
       createdAt: userApi.createdAt.toISOString(),
       lastRefreshedAt: userApi.lastRefreshedAt?.toISOString() ?? null,
-      canRefresh,
-      cooldownRemaining,           // minutes remaining in cooldown
-      dailyRemaining: Math.max(0, DAILY_LIMIT - dailyCount),
-      weeklyRemaining: Math.max(0, WEEKLY_LIMIT - weeklyCount),
+      canRefresh: rateLimitInfo.canRefresh,
+      cooldownRemaining,
+      dailyRemaining: rateLimitInfo.dailyRemaining,
+      weeklyRemaining: rateLimitInfo.weeklyRemaining,
       limits: {
         cooldownMinutes: COOLDOWN_MINUTES,
         dailyLimit: DAILY_LIMIT,
@@ -90,11 +55,10 @@ export const apiKeyRouter = createTRPCRouter({
 
   /**
    * Regenerate the user's API key.
-   * Enforces: 30-min cooldown, 3/day, 10/week.
-   *
-   * FIX (Bug 7): weekly limit now resets every Monday via log-based counting.
-   * FIX (Bug 8): daily limit is now actually enforced (was declared but never checked).
-   * FIX: throws TRPCError instead of plain Error so the client gets a proper error code.
+   * Uses rate-limiter-flexible for rate limiting:
+   * - 30-min cooldown between refreshes
+   * - 3 refreshes per day
+   * - 10 refreshes per week
    */
   refresh: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.user.id;
@@ -102,15 +66,23 @@ export const apiKeyRouter = createTRPCRouter({
 
     let existing = await prisma.userApi.findUnique({ where: { userId } });
 
-    // First-time user — create key, no cooldown needed
+    // First-time user — create key, no rate limit check needed
     if (!existing) {
-      const created = await prisma.$transaction(async (tx) => {
-        const userApi = await tx.userApi.create({
-          data: { userId, apiKey: nanoid(32), isActive: true, rateLimit: 100, lastRefreshedAt: now },
-        });
-        await tx.userApiRefreshLog.create({ data: { userId } });
-        return userApi;
+      const created = await prisma.userApi.create({
+        data: {
+          userId,
+          apiKey: nanoid(32),
+          isActive: true,
+          rateLimit: 100,
+          lastRefreshedAt: now,
+        },
       });
+
+      // Log the refresh for audit trail
+      await prisma.userApiRefreshLog.create({ data: { userId } });
+
+      // Consume quota in rate limiter
+      await consumeRefreshQuota(userId);
 
       return {
         apiKey: created.apiKey,
@@ -121,44 +93,47 @@ export const apiKeyRouter = createTRPCRouter({
       };
     }
 
-    // ── Rate limit checks ──────────────────────────────────────────────────
+    // ── Rate limit check using rate-limiter-flexible ─────────────────────────
 
-    const lastRefreshed = existing.lastRefreshedAt ?? existing.createdAt;
-    const minutesSinceLast = (now.getTime() - lastRefreshed.getTime()) / 60_000;
+    const rateLimitInfo = await getRefreshRateLimitInfo(userId);
 
-    if (minutesSinceLast < COOLDOWN_MINUTES) {
-      const minutesRemaining = Math.ceil(COOLDOWN_MINUTES - minutesSinceLast);
-      throw new TRPCError({
-        code: "TOO_MANY_REQUESTS",
-        message: `Please wait ${minutesRemaining} more minute(s) before refreshing again.`,
-      });
+    if (!rateLimitInfo.canRefresh) {
+      // Determine the appropriate error message
+      if (rateLimitInfo.cooldownRemainingMs > 0) {
+        const minutesRemaining = Math.ceil(rateLimitInfo.cooldownRemainingMs / 60_000);
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: `Please wait ${minutesRemaining} more minute(s) before refreshing again.`,
+        });
+      }
+
+      if (rateLimitInfo.dailyRemaining === 0) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: `Daily limit of ${DAILY_LIMIT} refreshes reached. Try again tomorrow.`,
+        });
+      }
+
+      if (rateLimitInfo.weeklyRemaining === 0) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: `Weekly limit of ${WEEKLY_LIMIT} refreshes reached. Try again next week.`,
+        });
+      }
     }
 
-    // FIX (Bug 8): daily limit is now enforced
-    const dailyCount = await prisma.userApiRefreshLog.count({
-      where: { userId, createdAt: { gte: startOfTodayUTC() } },
-    });
+    // ── Consume quota and rotate key ─────────────────────────────────────────
 
-    if (dailyCount >= DAILY_LIMIT) {
+    const consumeResult = await consumeRefreshQuota(userId);
+    if (!consumeResult.success) {
+      const minutesRemaining = consumeResult.retryAfterMs
+        ? Math.ceil(consumeResult.retryAfterMs / 60_000)
+        : COOLDOWN_MINUTES;
       throw new TRPCError({
         code: "TOO_MANY_REQUESTS",
-        message: `Daily limit of ${DAILY_LIMIT} refreshes reached. Try again tomorrow.`,
+        message: `Rate limit exceeded. Please wait ${minutesRemaining} more minute(s).`,
       });
     }
-
-    // FIX (Bug 7): weekly limit based on real timestamps — resets every Monday
-    const weeklyCount = await prisma.userApiRefreshLog.count({
-      where: { userId, createdAt: { gte: startOfThisWeekUTC() } },
-    });
-
-    if (weeklyCount >= WEEKLY_LIMIT) {
-      throw new TRPCError({
-        code: "TOO_MANY_REQUESTS",
-        message: `Weekly limit of ${WEEKLY_LIMIT} refreshes reached. Try again next Monday.`,
-      });
-    }
-
-    // ── Atomically rotate key + record the refresh ─────────────────────────
 
     const updated = await prisma.$transaction(async (tx) => {
       const userApi = await tx.userApi.update({
@@ -167,12 +142,11 @@ export const apiKeyRouter = createTRPCRouter({
           apiKey: nanoid(32),
           isActive: true,
           lastRefreshedAt: now,
-          // Keep refreshCount for legacy compatibility but it's no longer
-          // used for limit enforcement — the log table is the source of truth
           refreshCount: { increment: 1 },
         },
       });
 
+      // Keep logging for audit trail
       await tx.userApiRefreshLog.create({ data: { userId } });
 
       return userApi;

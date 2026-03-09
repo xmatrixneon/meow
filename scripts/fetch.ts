@@ -1,5 +1,5 @@
-import { config } from 'dotenv';
-config({ path: '.env' });
+// MUST be first - dotenv/config loads .env at import time before other imports are evaluated
+import 'dotenv/config';
 
 import {
   NumberStatus,
