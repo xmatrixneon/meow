@@ -48,6 +48,16 @@ This is a **Telegram Mini App** using Better Auth for authentication.
 - Uses Telegram Bot credentials from environment variables
 - Requires `BETTER_AUTH_URL` or `NEXT_PUBLIC_APP_URL` to be set
 - Uses custom PostgreSQL adapter (`@prisma/adapter-pg`) with a connection pool
+- Cookie prefix: `meowsms_` (e.g., `meowsms_session_token`)
+- Session: 7-day expiry, extends after 1 day of activity, 5-min cookie cache
+
+### User Bootstrap (`lib/auth.ts`)
+When a new user is created, `bootstrapUser()` runs asynchronously (via `setImmediate`) to create:
+- **Wallet**: Initial balance of 0
+- **UserData**: Status set to ACTIVE
+- **UserApi**: Auto-generated 32-char API key
+
+This is idempotent (uses upserts) and non-blocking. Layer 2 upserts in stubs/wallet routes provide fallback repair.
 
 ### Client-side Auth (`lib/auth-client.ts`)
 - Creates auth client with `better-auth/react`
@@ -59,13 +69,14 @@ This is a **Telegram Mini App** using Better Auth for authentication.
 - Uses `toNextJsHandler(auth.handler)` to handle auth requests
 
 ### Mini App Integration (`providers/telegram-auth-provider.tsx`)
-- Uses `@tma.js/sdk` with `init()` and `retrieveRawInitData()` for Telegram SDK access
-- Implements state machine: `idle` → `loading` → `authenticated`/`unauthenticated`/`error`
+- Uses `@telegram-apps/sdk-react` with `useRawInitData()` hook for Telegram SDK access
+- Implements state machine with reducer: `loading` → `authenticated`/`unauthenticated`/`error`
 - Auto-signs in via `authClient.signInWithMiniApp(initData)` on mount
 - Checks existing session first, validates against current Telegram user
 - Handles session mismatch by signing out and re-authenticating
 - Provides `useTelegramAuth()` hook via context for consuming auth state
 - Runs once per session using `useRef` guard
+- Shows progress UI during authentication flow
 
 ### Auth Hook (`hooks/use-telegram-auth.ts`)
 - Exports `TelegramAuthContext` and `useTelegramAuth()` hook
@@ -128,8 +139,9 @@ The project uses **tRPC** with **React Query** for type-safe API communication.
 ### Server-side tRPC (`lib/trpc/trpc.ts`)
 - **Context**: Created with `createTRPCContext()` - extracts session from Better Auth cookies
 - **Procedures**: `publicProcedure` (no auth), `protectedProcedure` (requires authenticated user)
-- **Transformer**: Uses `superjson` for automatic serialization
+- **Transformer**: Uses `superjson` for automatic serialization (Date, BigInt, Map, Set, undefined preserved)
 - **Error handling**: Formats Zod errors with flattened output
+- **Both client and server must use the same transformer** - superjson is configured in both `trpc.ts` (server) and `provider.tsx` (client)
 
 ### tRPC Routers (`lib/trpc/routers/`)
 - **_app.ts**: Main router merging all feature routers
@@ -146,6 +158,12 @@ The project uses **tRPC** with **React Query** for type-safe API communication.
 - Exports `trpc` client created with `createTRPCReact<AppRouter>()`
 - Integration with TanStack Query for caching and state management
 
+### tRPC Provider (`lib/trpc/provider.tsx`)
+- `TRPCProvider` component wraps the app with tRPC and React Query providers
+- Configures `httpBatchLink` with superjson transformer
+- Includes error handling for non-JSON responses
+- QueryClient: 5-minute stale time, no refetch on window focus
+
 ### Usage Example
 ```tsx
 import { trpc } from "@/lib/trpc/client";
@@ -161,6 +179,102 @@ function MyComponent() {
 
 ### Debug Mode
 Set `DEBUG_TRPC=1` in `.env` to enable tRPC request logging in development.
+
+## OTP Provider Client
+
+The project includes an OTP provider client for communicating with external SMS/OTP APIs.
+
+### Module (`lib/providers/`)
+- **client.ts**: `OtpProviderClient` class for API communication
+- **types.ts**: Type definitions and error messages
+- **index.ts**: Exports client, types, and error messages
+
+### Key Methods
+- `getNumber(service, country)`: Purchase a phone number for receiving SMS
+- `getStatus(id)`: Check SMS delivery status (WAITING/RECEIVED/CANCELLED)
+- `setStatus(id, status)`: Update order status (cancel=8, finish=6, get next SMS=3)
+- `getNextSms(id)`: Request another SMS for multi-SMS support
+- `getBalance()`: Check upstream provider balance
+
+### API Format
+- Path: `/stubs/handler_api.php` (configurable via `apiPath`)
+- Params: `api_key`, `action`, and action-specific parameters
+- Response formats: Plain text with prefixes (e.g., `ACCESS_NUMBER:id:phone`)
+
+### Error Handling
+- Known error codes mapped via `OTP_ERROR_MESSAGES`
+- Network errors return safe defaults (e.g., WAITING status) to avoid crashing pollers
+
+## Infinite Scroll Pattern
+
+The app uses cursor-based pagination for infinite scrolling on list pages.
+
+### Server-side (tRPC Routers)
+```typescript
+// Cursor-based pagination schema
+const historySchema = z.object({
+  limit: z.number().min(1).max(100).default(20),
+  cursor: z.string().optional(), // ISO date string
+});
+
+// Query pattern
+const items = await prisma.model.findMany({
+  where: {
+    userId,
+    ...(cursor && { createdAt: { lt: new Date(cursor) } }),
+  },
+  orderBy: { createdAt: "desc" },
+  take: limit + 1, // Fetch one extra to determine hasMore
+});
+
+// Return cursor for next page
+let nextCursor: string | null = null;
+if (items.length > limit) {
+  items.pop(); // Remove extra item
+  nextCursor = items[items.length - 1].createdAt.toISOString();
+}
+return { items, nextCursor };
+```
+
+### Client-side (React Components)
+```typescript
+// Use tRPC infinite query
+const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  trpc.resource.listInfinite.useInfiniteQuery(
+    { limit: 20 },
+    { getNextPageParam: (page) => page.nextCursor }
+  );
+
+// Flatten pages
+const items = useMemo(() =>
+  data?.pages.flatMap((page) => page.items) ?? [],
+[data]);
+
+// Intersection Observer for auto-loading
+const loadMoreRef = useRef<HTMLDivElement>(null);
+useEffect(() => {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    { threshold: 0.1, rootMargin: "100px" }
+  );
+  if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+  return () => observer.disconnect();
+}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+// Sentinel element in JSX
+<div ref={loadMoreRef}>
+  {isFetchingNextPage && <Spinner />}
+</div>
+```
+
+### Endpoints Using Infinite Scroll
+- `wallet.transactionsInfinite`: Transaction history
+- `number.getReceivedInfinite`: Completed numbers
+- `number.getCancelledInfinite`: Cancelled numbers
 
 ## Bot Integration
 
@@ -251,7 +365,7 @@ prisma/
 
 ## Layout Structure
 
-The root layout (`app/layout.tsx`) wraps the app with `TelegramAuthProvider`. The TMA.js SDK (`@tma.js/sdk`) handles Telegram WebApp script loading automatically via its `init()` function, so no manual script tag is needed. The layout includes:
+The root layout (`app/layout.tsx`) wraps the app with `TelegramAuthProvider`. The Telegram SDK (`@telegram-apps/sdk-react`) handles Telegram WebApp initialization automatically. The layout includes:
 - Top navbar (fixed)
 - Main content area (with padding for navbars)
 - Bottom navigation bar (fixed)
@@ -328,7 +442,7 @@ This pattern provides a type-safe state machine for authentication flows with cl
 ### Auth & Telegram
 - **better-auth** (1.5.1): Authentication server
 - **better-auth-telegram** (1.4.0): Telegram OAuth integration
-- **@tma.js/sdk-react** (3.0.16): Telegram Mini App SDK
+- **@telegram-apps/sdk-react** (3.3.9): Telegram Mini App SDK
 - **grammy** (1.40.0): Telegram bot framework
 
 ### API & Type Safety
@@ -336,7 +450,7 @@ This pattern provides a type-safe state machine for authentication flows with cl
 - **@trpc/react-query** (11.10.0): tRPC + TanStack Query integration
 - **@tanstack/react-query** (5.90.21): Data fetching and caching
 - **zod** (4.3.6): Schema validation
-- **superjson** (2.2.6): tRPC data transformer
+- **superjson** (2.2.6): tRPC data transformer for Date, BigInt, Map, Set serialization
 
 ### Database
 - **prisma** (7.4.1): TypeScript ORM

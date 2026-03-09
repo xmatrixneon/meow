@@ -31,7 +31,10 @@ const historySchema = z.object({
 
 /**
  * Calculate final price after applying any custom discount for the user.
+ * SECURITY: Enforces a minimum price floor to prevent zero-cost purchases.
  */
+const MINIMUM_PRICE = new Prisma.Decimal(0.10); // 10 paise minimum
+
 async function calculateFinalPrice(
   userId: string,
   serviceId: string,
@@ -43,14 +46,19 @@ async function calculateFinalPrice(
 
   if (!customPrice) return basePrice;
 
+  let final: Prisma.Decimal;
+
   if (customPrice.type === "FLAT") {
-    const final = basePrice.minus(customPrice.discount);
-    return final.isNegative() ? new Prisma.Decimal(0) : final;
+    final = basePrice.minus(customPrice.discount);
+  } else {
+    // PERCENT
+    const discountAmount = basePrice.mul(customPrice.discount.div(100));
+    final = basePrice.minus(discountAmount);
   }
 
-  // PERCENT
-  const discountAmount = basePrice.mul(customPrice.discount.div(100));
-  return basePrice.minus(discountAmount);
+  // SECURITY: Enforce minimum price floor — prevent zero-cost purchases
+  // even with 100% discount or flat discount >= base price
+  return final.lessThan(MINIMUM_PRICE) ? MINIMUM_PRICE : final;
 }
 
 /**

@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Hash,
   Wallet,
-  TrendingUp,
-  TrendingDown,
   MessageSquare,
   Zap,
   CreditCard,
@@ -16,10 +14,10 @@ import {
   Sparkles,
   Settings,
   Clock,
-  CheckCircle2,
   XCircle,
   AlertCircle,
   ShoppingBag,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -34,7 +32,28 @@ const fadeUp = (delay = 0) => ({
 
 type TxType = "numbers" | "refunds" | "deposits" | "all";
 
-const filters: { label: string; value: TxType; icon: any }[] = [
+interface TransactionMetadata {
+  serviceName?: string;
+  orderId?: string;
+  smsReceived?: boolean;
+  payerVpa?: string;
+  utr?: string;
+  transactionDate?: string;
+}
+
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  status: string;
+  description: string | null;
+  txnId?: string | null;
+  phoneNumber?: string | null;
+  metadata: TransactionMetadata | null;
+  createdAt: string;
+}
+
+const filters: { label: string; value: TxType; icon: React.ReactNode }[] = [
   { label: "Numbers", value: "numbers", icon: <CreditCard size={14} /> },
   { label: "Refunds", value: "refunds", icon: <Zap size={14} /> },
   { label: "Deposits", value: "deposits", icon: <Wallet size={14} /> },
@@ -73,11 +92,7 @@ const getTransactionColor = (type: string) => {
   }
 };
 
-const getTransactionTitle = (tx: {
-  type: string;
-  description: string | null;
-  metadata: any;
-}) => {
+const getTransactionTitle = (tx: Transaction) => {
   const { type, description, metadata } = tx;
 
   if (type === "PURCHASE") {
@@ -109,14 +124,7 @@ const getTransactionTitle = (tx: {
   }
 };
 
-const getTransactionSubtitle = (tx: {
-  type: string;
-  description: string | null;
-  metadata: any;
-  createdAt: string;
-  status: string;
-  phoneNumber: string | null;
-}) => {
+const getTransactionSubtitle = (tx: Transaction) => {
   const { type, description, metadata, createdAt, status, phoneNumber } = tx;
   if (status === "PENDING") return "Pending";
   if (status === "FAILED")  return "Failed";
@@ -124,7 +132,7 @@ const getTransactionSubtitle = (tx: {
     case "PURCHASE":
       return phoneNumber || "Number";
     case "DEPOSIT":
-      return metadata?.payerVpa || metadata?.utr?.substring(0, 8) || "Wallet";
+      return metadata?.payerVpa || (metadata?.utr ? metadata.utr.substring(0, 8) : "Wallet");
     case "REFUND":
       return phoneNumber || metadata?.serviceName || "Refunded";
     case "PROMO":
@@ -183,8 +191,7 @@ function TransactionsSkeleton() {
 
 export default function TransactionsPage() {
   const [filter, setFilter] = useState<TxType>("numbers");
-  const [txOffset, setTxOffset] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user;
@@ -193,34 +200,64 @@ export default function TransactionsPage() {
     enabled: !!user,
   });
 
-  const { data } = trpc.wallet.transactions.useQuery(
-    { limit: 50, offset: txOffset, status: "ALL" },
-    { staleTime: 30 * 1000 },
+  // Infinite query for transactions
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = trpc.wallet.transactionsInfinite.useInfiniteQuery(
+    { limit: 30, status: "ALL" },
+    {
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      staleTime: 30 * 1000,
+    },
   );
 
-  const allTransactions = data?.transactions || [];
-  const total = data?.total || 0;
-  const hasMore = txOffset + 50 < total;
+  // Flatten pages into single array
+  const allTransactions = useMemo(() => {
+    return infiniteData?.pages.flatMap((page) => page.transactions) || [];
+  }, [infiniteData]);
+
+  const total = infiniteData?.pages[0]?.total || 0;
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1, rootMargin: "100px" },
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const refundedOrderIds = useMemo(() => {
     const refunds = allTransactions.filter((tx) => tx.type === "REFUND");
-    return new Set(refunds.map((tx) => (tx.metadata as any)?.orderId));
+    return new Set(refunds.map((tx) => (tx.metadata as TransactionMetadata)?.orderId).filter(Boolean));
   }, [allTransactions]);
 
-  const filteredTransactions =
-    filter === "all"
-      ? allTransactions
-      : allTransactions.filter((tx) => {
-          if (filter === "numbers") {
-            return (
-              tx.type === "PURCHASE" &&
-              !refundedOrderIds.has((tx.metadata as any)?.orderId)
-            );
-          }
-          if (filter === "refunds")  return tx.type === "REFUND";
-          if (filter === "deposits") return tx.type === "DEPOSIT" || tx.type === "PROMO";
-          return true;
-        });
+  const filteredTransactions = useMemo(() => {
+    if (filter === "all") return allTransactions;
+    return allTransactions.filter((tx) => {
+      if (filter === "numbers") {
+        return (
+          tx.type === "PURCHASE" &&
+          !refundedOrderIds.has((tx.metadata as TransactionMetadata)?.orderId)
+        );
+      }
+      if (filter === "refunds") return tx.type === "REFUND";
+      if (filter === "deposits") return tx.type === "DEPOSIT" || tx.type === "PROMO";
+      return true;
+    });
+  }, [allTransactions, filter, refundedOrderIds]);
 
   const filteredTotal = filter === "all" ? total : filteredTransactions.length;
 
@@ -328,8 +365,9 @@ export default function TransactionsPage() {
               {filteredTransactions.map((tx, i) => {
                 const colorConfig = getTransactionColor(tx.type);
                 const isCredit = ["DEPOSIT", "PROMO", "REFERRAL", "REFUND", "ADJUSTMENT"].includes(tx.type);
-                const title    = getTransactionTitle(tx);
-                const subtitle = getTransactionSubtitle(tx);
+                const typedTx = { ...tx, metadata: tx.metadata as TransactionMetadata | null };
+                const title    = getTransactionTitle(typedTx);
+                const subtitle = getTransactionSubtitle(typedTx);
 
                 return (
                   <motion.div
@@ -350,7 +388,7 @@ export default function TransactionsPage() {
                       <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
 
                       {/* PURCHASE: SMS badge */}
-                      {tx.type === "PURCHASE" && (tx.metadata as any)?.smsReceived && (
+                      {tx.type === "PURCHASE" && typedTx.metadata?.smsReceived && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <MessageSquare size={9} className="text-green-500" />
                           <span className="text-[10px] text-green-500">SMS</span>
@@ -358,10 +396,10 @@ export default function TransactionsPage() {
                       )}
 
                       {/* REFUND: service name badge */}
-                      {tx.type === "REFUND" && (tx.metadata as any)?.serviceName && (
+                      {tx.type === "REFUND" && typedTx.metadata?.serviceName && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <Zap size={9} className="text-sky-500" />
-                          <span className="text-[10px] text-sky-500">{(tx.metadata as any)?.serviceName}</span>
+                          <span className="text-[10px] text-sky-500">{typedTx.metadata.serviceName}</span>
                         </div>
                       )}
 
@@ -374,9 +412,9 @@ export default function TransactionsPage() {
                       )}
 
                       {/* DEPOSIT: transaction date */}
-                      {tx.type === "DEPOSIT" && (tx.metadata as any)?.transactionDate && (
+                      {tx.type === "DEPOSIT" && typedTx.metadata?.transactionDate && (
                         <span className="text-[10px] text-muted-foreground/70">
-                          {new Date((tx.metadata as any)?.transactionDate).toLocaleDateString()}
+                          {new Date(typedTx.metadata.transactionDate).toLocaleDateString()}
                         </span>
                       )}
                     </div>
@@ -407,7 +445,7 @@ export default function TransactionsPage() {
           )}
         </AnimatePresence>
 
-        {/* ── Footer summary ── */}
+        {/* ── Footer summary & Infinite scroll sentinel ── */}
         {filteredTransactions.length > 0 && (
           <>
             <motion.div
@@ -445,20 +483,18 @@ export default function TransactionsPage() {
               </div>
             </motion.div>
 
-            {filter === "all" && hasMore && (
-              <motion.div {...fadeUp(0.28)} className="flex justify-center py-4">
-                <button
-                  onClick={() => {
-                    setLoadingMore(true);
-                    setTxOffset((prev) => prev + 50);
-                  }}
-                  disabled={loadingMore}
-                  className="px-6 py-2 bg-primary text-primary-foreground rounded-full text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-opacity duration-200"
-                >
-                  {loadingMore ? "Loading..." : "Load More"}
-                </button>
-              </motion.div>
-            )}
+            {/* Infinite scroll sentinel - Intersection Observer target */}
+            <div ref={loadMoreRef} className="flex justify-center py-4">
+              {isFetchingNextPage && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-sm">Loading more...</span>
+                </div>
+              )}
+              {!hasNextPage && !isFetchingNextPage && filter === "all" && (
+                <p className="text-xs text-muted-foreground">All transactions loaded</p>
+              )}
+            </div>
           </>
         )}
       </div>

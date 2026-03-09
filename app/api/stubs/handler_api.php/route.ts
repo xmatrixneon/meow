@@ -218,19 +218,23 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   }
 
   // Calculate price with custom discount if applicable
+  // SECURITY: Enforce minimum price floor to prevent zero-cost purchases
+  const MINIMUM_PRICE = new Decimal(0.10); // 10 paise minimum
   let finalPrice = service.basePrice;
   const customPrice = await prisma.customPrice.findUnique({
     where: { userId_serviceId: { userId: user.id, serviceId: service.id } },
   });
 
   if (customPrice) {
+    let calculated: Prisma.Decimal;
     if (customPrice.type === "FLAT") {
-      const after = service.basePrice.minus(customPrice.discount);
-      finalPrice = after.isNegative() ? new Decimal(0) : after;
+      calculated = service.basePrice.minus(customPrice.discount);
     } else {
       const discountAmount = service.basePrice.mul(customPrice.discount.div(100));
-      finalPrice = service.basePrice.minus(discountAmount);
+      calculated = service.basePrice.minus(discountAmount);
     }
+    // SECURITY: Enforce minimum price floor
+    finalPrice = calculated.lessThan(MINIMUM_PRICE) ? MINIMUM_PRICE : calculated;
   }
 
   const orderId = nanoid(16);

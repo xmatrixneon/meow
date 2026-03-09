@@ -605,7 +605,7 @@ export default function NumbersPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("waiting");
   const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const utils = trpc.useUtils();
   const initializedRef = useRef(false);
@@ -625,6 +625,7 @@ export default function NumbersPage() {
     data: receivedData,
     fetchNextPage: fetchNextReceived,
     hasNextPage: hasMoreReceived,
+    isFetchingNextPage: isFetchingNextReceived,
   } = trpc.number.getReceivedInfinite.useInfiniteQuery(
     { limit: 20 },
     { getNextPageParam: (p: any) => p.nextCursor, staleTime: 60_000 },
@@ -634,6 +635,7 @@ export default function NumbersPage() {
     data: cancelledData,
     fetchNextPage: fetchNextCancelled,
     hasNextPage: hasMoreCancelled,
+    isFetchingNextPage: isFetchingNextCancelled,
   } = trpc.number.getCancelledInfinite.useInfiniteQuery(
     { limit: 20 },
     { getNextPageParam: (p: any) => p.nextCursor, staleTime: 60_000 },
@@ -812,15 +814,37 @@ export default function NumbersPage() {
     [buyNextMutation],
   );
 
-  const handleLoadMore = async () => {
-    setLoadingMore(true);
-    try {
-      if (activeTab === "received") await fetchNextReceived();
-      if (activeTab === "cancelled") await fetchNextCancelled();
-    } finally {
-      setLoadingMore(false);
+  // Intersection Observer for infinite scroll
+  const isFetchingNextPage = activeTab === "received"
+    ? isFetchingNextReceived
+    : activeTab === "cancelled"
+      ? isFetchingNextCancelled
+      : false;
+
+  const hasMore =
+    activeTab === "received"
+      ? hasMoreReceived
+      : activeTab === "cancelled"
+        ? hasMoreCancelled
+        : false;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isFetchingNextPage) {
+          if (activeTab === "received") fetchNextReceived();
+          if (activeTab === "cancelled") fetchNextCancelled();
+        }
+      },
+      { threshold: 0.1, rootMargin: "100px" },
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
     }
-  };
+
+    return () => observer.disconnect();
+  }, [hasMore, isFetchingNextPage, activeTab, fetchNextReceived, fetchNextCancelled]);
 
   const counts = {
     waiting: numbers.length,
@@ -834,13 +858,6 @@ export default function NumbersPage() {
       : activeTab === "received"
         ? receivedNumbers
         : cancelledNumbers;
-
-  const hasMore =
-    activeTab === "received"
-      ? hasMoreReceived
-      : activeTab === "cancelled"
-        ? hasMoreCancelled
-        : false;
 
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
@@ -944,26 +961,18 @@ export default function NumbersPage() {
               ))}
 
               {hasMore && (
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="w-full py-3 bg-card border border-border rounded-2xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-60"
-                >
-                  {loadingMore ? (
-                    <div className="flex items-center justify-center gap-2">
+                <div ref={loadMoreRef} className="flex justify-center py-4">
+                  {isFetchingNextPage && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
                       <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
                         className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
                       />
-                      Loading…
+                      <span className="text-sm">Loading more...</span>
                     </div>
-                  ) : (
-                    "Load More"
                   )}
-                </motion.button>
+                </div>
               )}
             </div>
           )}

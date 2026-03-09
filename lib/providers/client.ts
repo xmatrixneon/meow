@@ -49,7 +49,6 @@ export class OtpProviderClient {
     params: Record<string, string> = {},
   ): Promise<string> {
     const url = this.buildUrl(action, params);
-    console.log(`[OTP] →`, { action, url: url.replace(this.apiKey, '***') });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -63,7 +62,6 @@ export class OtpProviderClient {
       }
 
       const text = (await response.text()).trim();
-      console.log(`[OTP] ←`, { action, response: text.slice(0, 120) });
       return text;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -143,11 +141,9 @@ export class OtpProviderClient {
         return { status: 'CANCELLED' };
       }
 
-      console.warn(`[OTP] getStatus unknown response for id=${id}: ${response}`);
       return { status: 'WAITING' }; // safe default — don't cancel on unknown response
     } catch (error) {
       // FIX: transient errors return WAITING so poller doesn't crash or cancel valid orders
-      console.error(`[OTP] getStatus error id=${id}:`, error instanceof Error ? error.message : error);
       return { status: 'WAITING' };
     }
   }
@@ -228,10 +224,24 @@ export class OtpProviderClient {
         return { success: false, error: this.parseError(response) };
       }
 
+      // Handle empty response
+      if (!response || response.trim() === '') {
+        return { success: false, error: 'Empty response from provider' };
+      }
+
       try {
-        return { success: true, data: JSON.parse(response) };
+        const parsed = JSON.parse(response);
+
+        // Validate response is an object (expected structure)
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          return { success: false, error: `Invalid response format: expected object` };
+        }
+
+        return { success: true, data: parsed };
       } catch {
-        return { success: false, error: `Invalid JSON: ${response}` };
+        // Truncate response in error to avoid huge logs
+        const truncated = response.length > 100 ? response.slice(0, 100) + '...' : response;
+        return { success: false, error: `Invalid JSON response: ${truncated}` };
       }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -249,6 +259,11 @@ export class OtpProviderClient {
         return { success: false, error: this.parseError(response) };
       }
 
+      // Handle empty response
+      if (!response || response.trim() === '') {
+        return { success: false, error: 'Empty response from provider' };
+      }
+
       try {
         const raw = JSON.parse(response);
 
@@ -264,7 +279,9 @@ export class OtpProviderClient {
 
         return { success: true, data };
       } catch {
-        return { success: false, error: `Invalid JSON: ${response}` };
+        // Truncate response in error to avoid huge logs
+        const truncated = response.length > 100 ? response.slice(0, 100) + '...' : response;
+        return { success: false, error: `Invalid JSON response: ${truncated}` };
       }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
