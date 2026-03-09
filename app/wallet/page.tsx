@@ -272,13 +272,13 @@ export default function WalletPage() {
             />
             <ActionRow
               icon={Bitcoin}
-              iconColor="text-amber-500"
-              iconBg="bg-amber-500/10"
+              iconColor="text-muted-foreground"
+              iconBg="bg-muted"
               title="Crypto"
-              subtitle="Bitcoin, Ethereum & more"
+              subtitle="Coming soon"
               delay={0.12}
               superscript="SOON"
-              superscriptClass="text-amber-600 bg-amber-500/10"
+              superscriptClass="text-muted-foreground bg-muted"
               disabled
             />
             <ActionRow
