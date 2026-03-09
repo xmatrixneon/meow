@@ -321,6 +321,36 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
           },
         });
 
+        // Update Transaction metadata with smsReceived for history page display
+        await prisma.$transaction(async (tx) => {
+          const wallet = await tx.wallet.findUnique({ where: { userId: number.userId } });
+          if (wallet) {
+            // Find the PURCHASE transaction by orderId in metadata
+            const existingTx = await tx.transaction.findFirst({
+              where: {
+                walletId: wallet.id,
+                type: 'PURCHASE',
+                metadata: { path: ['orderId'], equals: number.orderId },
+              },
+            });
+
+            if (existingTx?.metadata) {
+              // Update metadata with smsReceived: true
+              await tx.transaction.update({
+                where: { id: existingTx.id },
+                data: {
+                  metadata: {
+                    ...(existingTx.metadata as Record<string, unknown>),
+                    smsReceived: true,
+                  },
+                },
+              });
+            }
+          }
+        }).catch((err) => {
+          console.warn(`[sms] Failed to update transaction metadata for orderId=${number.orderId}:`, err);
+        });
+
         // FIX (Bug 3 + Bug 10): do NOT call finishOrder immediately.
         // finishOrder tells the provider we are done — but the number stays
         // ACTIVE for multi-SMS until expiry closes it.
