@@ -138,7 +138,7 @@ export const walletRouter = createTRPCRouter({
           where: {
             walletId: wallet.id,
             status: "COMPLETED",
-            type: { in: ["DEPOSIT", "REFUND"] },
+            type: { in: ["DEPOSIT", "REFUND", "PROMO"] },
           },
           _sum: { amount: true },
         }),
@@ -559,6 +559,7 @@ export const walletRouter = createTRPCRouter({
             where: { id: wallet.id },
             data: {
               balance: { increment: promocode.amount },
+              totalRecharge: { increment: promocode.amount },
             },
           });
 
