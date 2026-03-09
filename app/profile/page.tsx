@@ -4,11 +4,9 @@ import { motion } from "framer-motion";
 import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
-  User as UserIcon,
-  Mail,
-  Wallet,
   HelpCircle,
   FileText,
   ChevronRight,
@@ -21,10 +19,10 @@ import {
   TrendingUp,
   BadgeCheck,
   RefreshCw,
-  Key,
   Clock,
   BookOpen,
   MessageCircle,
+  Wallet,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -34,14 +32,14 @@ import { SupportDialog } from "@/components/support-dialog";
 import { LegalDialog } from "@/components/legal-dialog";
 
 const fadeUp = (delay = 0) => ({
-  initial: { opacity: 0, y: 16 },
+  initial: { opacity: 0, y: 12 },
   animate: { opacity: 1, y: 0 },
-  transition: { type: "spring" as const, stiffness: 280, damping: 24, delay },
+  transition: { type: "spring" as const, stiffness: 280, damping: 26, delay },
 });
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60 px-1 mb-2">
+    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-0.5 mb-2">
       {label}
     </p>
   );
@@ -66,135 +64,63 @@ function SettingsRow({
 }) {
   return (
     <motion.button
-      whileTap={{ scale: 0.988 }}
+      whileTap={{ scale: 0.99 }}
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3.5 px-4 py-3.5 text-left",
-        "hover:bg-muted/50 transition-colors duration-150",
-        danger && "hover:bg-destructive/5",
+        "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors duration-150",
+        danger ? "hover:bg-destructive/5" : "hover:bg-accent",
       )}
     >
       <div
         className={cn(
           "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
-          danger ? "bg-destructive/10" : "bg-primary/10 dark:bg-primary/15",
+          danger ? "bg-destructive/10" : "bg-muted",
         )}
       >
         <Icon
-          size={16}
+          size={15}
           strokeWidth={2}
-          className={
-            danger ? "text-destructive" : (iconColor ?? "text-primary")
-          }
+          className={danger ? "text-destructive" : (iconColor ?? "text-foreground")}
         />
       </div>
-      <span
-        className={cn(
-          "flex-1 text-sm font-medium",
-          danger ? "text-destructive" : "text-foreground",
-        )}
-      >
+      <span className={cn("flex-1 text-sm font-medium", danger ? "text-destructive" : "text-foreground")}>
         {label}
       </span>
-      {value && (
-        <span className="text-xs text-muted-foreground mr-1">{value}</span>
-      )}
+      {value && <span className="text-xs text-muted-foreground mr-1">{value}</span>}
       {trailing ?? (
-        <ChevronRight
-          size={15}
-          strokeWidth={2.5}
-          className="text-muted-foreground/50 shrink-0"
-        />
+        <ChevronRight size={14} strokeWidth={2.5} className="text-muted-foreground/40 shrink-0" />
       )}
     </motion.button>
   );
 }
 
-function SettingsCard({
-  children,
-  delay,
-}: {
-  children: React.ReactNode;
-  delay?: number;
-}) {
-  return (
-    <motion.div
-      {...fadeUp(delay ?? 0)}
-      className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/60"
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-function StatPill({
-  value,
-  label,
-  accent,
-}: {
-  value: string;
-  label: string;
-  accent: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-0.5 flex-1">
-      <p className={cn("text-lg font-bold tabular-nums", accent)}>{value}</p>
-      <p className="text-[10px] text-muted-foreground text-center leading-tight">
-        {label}
-      </p>
-    </div>
-  );
-}
-
 function ProfileSkeleton() {
   return (
-    <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-      {/* Hero */}
-      <div className="rounded-3xl border border-border px-5 py-6 space-y-4">
+    <div className="flex-1 px-4 pt-4 pb-28 max-w-md mx-auto w-full space-y-4">
+      <div className="rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center gap-4">
-          <Skeleton className="w-20 h-20 rounded-2xl shrink-0" />
+          <Skeleton className="w-16 h-16 rounded-2xl shrink-0" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3.5 w-24" />
             <Skeleton className="h-3 w-20" />
           </div>
         </div>
-        <div className="pt-4 border-t border-border flex items-center gap-2">
-          <Skeleton className="h-8 flex-1 rounded-xl" />
-          <Skeleton className="w-px h-8" />
-          <Skeleton className="h-8 flex-1 rounded-xl" />
-          <Skeleton className="w-px h-8" />
-          <Skeleton className="h-8 flex-1 rounded-xl" />
-          <Skeleton className="w-px h-8" />
-          <Skeleton className="h-8 flex-1 rounded-xl" />
-        </div>
       </div>
-      {/* Account section */}
-      <div className="space-y-2">
-        <Skeleton className="h-3 w-16" />
-        <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border/60">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3.5 px-4 py-3.5">
-              <Skeleton className="w-8 h-8 rounded-xl shrink-0" />
-              <Skeleton className="h-4 flex-1" />
-              <Skeleton className="h-3 w-12" />
-            </div>
-          ))}
+      {[...Array(2)].map((_, i) => (
+        <div key={i} className="space-y-2">
+          <Skeleton className="h-3 w-16" />
+          <div className="border border-border rounded-xl overflow-hidden">
+            {[...Array(2)].map((_, j) => (
+              <div key={j} className="flex items-center gap-3 px-4 py-3">
+                <Skeleton className="w-8 h-8 rounded-xl shrink-0" />
+                <Skeleton className="h-4 flex-1" />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-      {/* Support section */}
-      <div className="space-y-2">
-        <Skeleton className="h-3 w-16" />
-        <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border/60">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3.5 px-4 py-3.5">
-              <Skeleton className="w-8 h-8 rounded-xl shrink-0" />
-              <Skeleton className="h-4 flex-1" />
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
@@ -202,39 +128,26 @@ function ProfileSkeleton() {
 export default function ProfilePage() {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [apiDocsOpen, setApiDocsOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
 
-  // ✅ single source of truth
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user as User | undefined;
 
-  // Get settings for telegram help URL
   const { data: settings } = trpc.service.settings.useQuery();
+  const { data: walletData } = trpc.wallet.balance.useQuery(undefined, { enabled: !!user });
+  const { data: apiKeyData, refetch: refetchApiKey } = trpc.apiKey.get.useQuery(undefined, { enabled: !!user });
 
-  // Get wallet data with real statistics
-  const { data: walletData } = trpc.wallet.balance.useQuery(undefined, {
-    enabled: !!user,
-  });
-
-  // Get or create API key
-  const { data: apiKeyData, refetch: refetchApiKey } =
-    trpc.apiKey.get.useQuery(undefined, {
-      enabled: !!user,
-    });
-
-  // Refresh API key mutation
   const refreshApiKeyMutation = trpc.apiKey.refresh.useMutation({
     onSuccess: () => {
       refetchApiKey();
-      setCopied(false);
+      setApiKeyCopied(false);
       setRefreshError(null);
     },
-    onError: (error) => {
-      setRefreshError(error.message);
-    },
+    onError: (error) => setRefreshError(error.message),
   });
 
   const displayName =
@@ -242,14 +155,8 @@ export default function ProfilePage() {
     user?.name ||
     user?.telegramUsername ||
     "User";
-
   const avatarUrl = user?.photoUrl ?? user?.image ?? null;
-  const initials = displayName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = displayName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   const handleCopyId = () => {
     if (user?.telegramId) {
@@ -262,41 +169,30 @@ export default function ProfilePage() {
   const handleCopyApiKey = () => {
     if (apiKeyData?.apiKey) {
       navigator.clipboard.writeText(apiKeyData.apiKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
     }
-  };
-
-  const handleRefreshApiKey = () => {
-    if (refreshApiKeyMutation.isPending) return;
-    setRefreshError(null);
-    refreshApiKeyMutation.mutate();
   };
 
   const balance = Number(walletData?.balance ?? 0);
   const totalSpent = Number(walletData?.totalSpent ?? 0);
   const totalRecharge = Number(walletData?.totalRecharge ?? 0);
 
-  // ── Skeleton
   if (isPending && !user) return <ProfileSkeleton />;
 
-  // ── Not in Telegram
   if (!user) {
     return (
       <div className="min-h-[calc(100vh-7rem)] flex items-center justify-center p-6">
         <motion.div
-          initial={{ scale: 0.85, opacity: 0 }}
+          initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring" as const, stiffness: 300, damping: 22 }}
-          className="bg-card border border-border rounded-3xl p-8 text-center max-w-sm w-full shadow-xl"
+          className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm w-full"
         >
-          <div className="w-14 h-14 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-            <HelpCircle size={24} className="text-destructive" />
+          <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <HelpCircle size={22} className="text-destructive" />
           </div>
-          <p className="font-semibold text-foreground mb-1">Not available</p>
-          <p className="text-sm text-muted-foreground">
-            Open this app inside Telegram to continue.
-          </p>
+          <p className="font-semibold mb-1">Not available</p>
+          <p className="text-sm text-muted-foreground">Open this app inside Telegram to continue.</p>
         </motion.div>
       </div>
     );
@@ -304,161 +200,157 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
-      <div className="flex-1 px-4 pt-5 pb-28 max-w-md mx-auto w-full space-y-5">
-        {/* Avatar Hero */}
+      <div className="flex-1 px-4 pt-4 pb-28 max-w-md mx-auto w-full space-y-4">
+
+        {/* Profile hero */}
         <motion.div
           {...fadeUp(0)}
-          className="relative overflow-hidden rounded-3xl bg-primary/10 dark:bg-primary/15 border border-primary/20 px-5 py-6"
+          className="bg-card border border-border rounded-xl p-5"
         >
-          <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-primary/5 blur-2xl pointer-events-none" />
-          <div className="relative flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <div className="relative shrink-0">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
                   alt={displayName}
-                  className="w-20 h-20 rounded-2xl object-cover border-2 border-primary/30 shadow-lg"
+                  className="w-16 h-16 rounded-2xl object-cover border border-border"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold border-2 border-primary/30 shadow-lg">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary text-xl font-bold border border-border">
                   {initials}
                 </div>
               )}
-              <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-card shadow-sm" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-card" />
             </div>
+
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-foreground truncate leading-tight flex items-center gap-1.5">
+              <h1 className="text-base font-bold text-foreground truncate flex items-center gap-1.5">
                 {displayName}
-                <BadgeCheck size={18} className="text-blue-500 shrink-0" />
+                <BadgeCheck size={15} className="text-blue-500 shrink-0" />
               </h1>
               {user.telegramUsername && (
-                <p className="text-sm text-primary font-medium mt-0.5">
-                  @{user.telegramUsername}
-                </p>
-              )}
-              {user.email && (
-                <p className="text-xs text-muted-foreground mt-1 truncate">
-                  {user.email}
-                </p>
+                <p className="text-sm text-muted-foreground">@{user.telegramUsername}</p>
               )}
               {user.isPremium && (
-                <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-semibold text-amber-500">
+                <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-semibold text-amber-500">
                   <Sparkles size={9} />
-                  Telegram Premium
+                  Premium
                 </span>
               )}
               {user.telegramId && (
                 <button
                   type="button"
                   onClick={handleCopyId}
-                  className={cn(
-                    "mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full",
-                    "bg-card/80 border border-border text-xs text-muted-foreground",
-                    "hover:border-primary/40 transition-colors duration-150",
-                  )}
+                  className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {copied ? (
-                    <CheckCheck size={11} className="text-green-500" />
-                  ) : (
-                    <Copy size={11} />
-                  )}
+                  {copied ? <CheckCheck size={11} className="text-green-500" /> : <Copy size={11} />}
                   <span className="font-mono">ID: {user.telegramId}</span>
                 </button>
               )}
             </div>
           </div>
-        
+
+          <Separator className="my-4" />
+
+          {/* Wallet stats */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Balance", value: balance.toFixed(2), icon: Wallet, color: "text-primary" },
+              { label: "Spent", value: totalSpent.toFixed(2), icon: TrendingDown, color: "text-rose-500" },
+              { label: "Recharged", value: totalRecharge.toFixed(2), icon: TrendingUp, color: "text-green-500" },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div key={label} className="flex flex-col items-center gap-1 bg-muted/50 rounded-lg py-2.5">
+                <Icon size={13} className={color} />
+                <p className={cn("text-sm font-bold tabular-nums", color)}>
+                  ₹{value}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{label}</p>
+              </div>
+            ))}
+          </div>
         </motion.div>
 
-        {/* API Key Section */}
-        <motion.div
-          {...fadeUp(0.1)}
-          className="bg-card border border-border rounded-2xl overflow-hidden"
-        >
-          <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/60">
+        {/* API Access */}
+        <motion.div {...fadeUp(0.08)} className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               API Access
             </p>
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setApiDocsOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/5 hover:bg-primary/10 border border-primary/10 text-primary text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-xs font-medium transition-colors"
             >
-              <BookOpen size={12} />
-              API Docs
+              <BookOpen size={11} />
+              Docs
             </motion.button>
           </div>
+
           <div className="p-4 space-y-3">
             <p className="text-xs text-muted-foreground">
-              Use this API key to resell our SMS services programmatically.
+              Use this key to resell SMS services programmatically.
             </p>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-muted/50 border border-border rounded-xl px-3 py-2.5 overflow-hidden">
+              <div className="flex-1 bg-muted rounded-lg px-3 py-2 overflow-hidden border border-border/50">
                 <code className="text-xs font-mono text-foreground truncate block">
-                  {apiKeyData?.apiKey ?? "Loading..."}
+                  {apiKeyData?.apiKey ?? "Loading…"}
                 </code>
               </div>
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 onClick={handleCopyApiKey}
                 disabled={!apiKeyData?.apiKey}
-                className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Copy API Key"
+                className="p-2 rounded-lg bg-muted border border-border/50 hover:bg-accent transition-colors disabled:opacity-50"
               >
-                <Copy
-                  size={16}
-                  strokeWidth={2}
-                  className={
-                    copied ? "text-green-500" : "text-primary"
-                  }
-                />
+                <Copy size={14} className={apiKeyCopied ? "text-green-500" : "text-muted-foreground"} />
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={handleRefreshApiKey}
+                onClick={() => {
+                  if (!refreshApiKeyMutation.isPending && apiKeyData?.canRefresh) {
+                    setRefreshError(null);
+                    refreshApiKeyMutation.mutate();
+                  }
+                }}
                 disabled={refreshApiKeyMutation.isPending || !apiKeyData?.canRefresh}
-                className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed relative"
-                title={apiKeyData?.canRefresh ? "Regenerate API Key" : "Cooldown active"}
+                className="relative p-2 rounded-lg bg-muted border border-border/50 hover:bg-accent transition-colors disabled:opacity-50"
               >
                 <RefreshCw
-                  size={16}
-                  strokeWidth={2}
-                  className={
-                    refreshApiKeyMutation.isPending
-                      ? "text-amber-500 animate-spin"
-                      : !apiKeyData?.canRefresh
-                      ? "text-amber-500/50"
-                      : "text-amber-500"
-                  }
+                  size={14}
+                  className={cn(
+                    refreshApiKeyMutation.isPending ? "animate-spin text-primary" : "text-muted-foreground",
+                  )}
                 />
                 {!apiKeyData?.canRefresh && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center">
                     <Clock size={7} className="text-white" />
                   </span>
                 )}
               </motion.button>
             </div>
-            <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-              <p className="flex items-center gap-1">
-                Created: {apiKeyData?.createdAt ? new Date(apiKeyData.createdAt).toLocaleDateString() : '-'}
-              </p>
-              <span className="w-px h-3 bg-border/60" />
-              <p className="flex items-center gap-1">
-                Refreshed: {(apiKeyData?.limits?.weeklyLimit ?? 10) - (apiKeyData?.weeklyRemaining ?? 0)}/{apiKeyData?.limits?.weeklyLimit ?? 10} (weekly)
-              </p>
+
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span>
+                Created: {apiKeyData?.createdAt ? new Date(apiKeyData.createdAt).toLocaleDateString() : "—"}
+              </span>
+              <span className="w-px h-3 bg-border" />
+              <span>
+                Refreshes: {(apiKeyData?.limits?.weeklyLimit ?? 10) - (apiKeyData?.weeklyRemaining ?? 0)}/{apiKeyData?.limits?.weeklyLimit ?? 10} used
+              </span>
             </div>
+
             {apiKeyData?.cooldownRemaining && apiKeyData.cooldownRemaining > 0 && (
-              <p className="text-[10px] text-amber-500 flex items-center gap-1">
-                <Clock size={9} />
+              <p className="text-[11px] text-amber-500 flex items-center gap-1.5">
+                <Clock size={10} />
                 Cooldown: {apiKeyData.cooldownRemaining} min remaining
               </p>
             )}
+
             {refreshError && (
               <motion.p
-                initial={{ opacity: 0, y: -5 }}
+                initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-[11px] text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2"
+                className="text-[11px] text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2"
               >
                 {refreshError}
               </motion.p>
@@ -469,64 +361,47 @@ export default function ProfilePage() {
         {/* Support */}
         <div>
           <SectionLabel label="Support" />
-          <SettingsCard delay={0.2}>
-            <SettingsRow
-              icon={HelpCircle}
-              label="Help & FAQ"
-              onClick={() => setSupportOpen(true)}
-            />
+          <motion.div
+            {...fadeUp(0.14)}
+            className="bg-card border border-border rounded-xl overflow-hidden divide-y divide-border/60"
+          >
+            <SettingsRow icon={HelpCircle} label="Help & FAQ" onClick={() => setSupportOpen(true)} />
             {settings?.telegramSupportUsername && (
               <a
                 href={`https://t.me/${settings.telegramSupportUsername}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full block"
+                className="block"
               >
                 <SettingsRow
                   icon={MessageCircle}
                   iconColor="text-blue-500"
                   label="Telegram Support"
                   onClick={() => {}}
-                  trailing={<ExternalLink size={13} className="text-muted-foreground/50 shrink-0" />}
+                  trailing={<ExternalLink size={13} className="text-muted-foreground/40 shrink-0" />}
                 />
               </a>
             )}
-            <SettingsRow
-              icon={FileText}
-              label="Terms & Privacy"
-              onClick={() => setLegalOpen(true)}
-            />
-          </SettingsCard>
+            <SettingsRow icon={FileText} label="Terms & Privacy" onClick={() => setLegalOpen(true)} />
+          </motion.div>
         </div>
 
         <motion.p
-          {...fadeUp(0.16)}
+          {...fadeUp(0.18)}
           className="text-center text-[10px] text-muted-foreground/40 pb-2"
         >
           MeowSMS v1.0.0 · Built with 🇷🇺
         </motion.p>
       </div>
 
-      {/* API Docs Dialog */}
       <ApiDocsDialog
         open={apiDocsOpen}
         onOpenChange={setApiDocsOpen}
         apiKey={apiKeyData?.apiKey ?? ""}
         baseUrl={settings?.apiDocsBaseUrl ?? undefined}
       />
-
-      {/* Support Dialog */}
-      <SupportDialog
-        open={supportOpen}
-        onOpenChange={setSupportOpen}
-        telegramHelpUrl={settings?.telegramHelpUrl}
-      />
-
-      {/* Legal Dialog */}
-      <LegalDialog
-        open={legalOpen}
-        onOpenChange={setLegalOpen}
-      />
+      <SupportDialog open={supportOpen} onOpenChange={setSupportOpen} telegramHelpUrl={settings?.telegramHelpUrl} />
+      <LegalDialog open={legalOpen} onOpenChange={setLegalOpen} />
     </div>
   );
 }
