@@ -48,6 +48,16 @@ This is a **Telegram Mini App** using Better Auth for authentication.
 - Uses Telegram Bot credentials from environment variables
 - Requires `BETTER_AUTH_URL` or `NEXT_PUBLIC_APP_URL` to be set
 - Uses custom PostgreSQL adapter (`@prisma/adapter-pg`) with a connection pool
+- Cookie prefix: `meowsms_` (e.g., `meowsms_session_token`)
+- Session: 7-day expiry, extends after 1 day of activity, 5-min cookie cache
+
+### User Bootstrap (`lib/auth.ts`)
+When a new user is created, `bootstrapUser()` runs asynchronously (via `setImmediate`) to create:
+- **Wallet**: Initial balance of 0
+- **UserData**: Status set to ACTIVE
+- **UserApi**: Auto-generated 32-char API key
+
+This is idempotent (uses upserts) and non-blocking. Layer 2 upserts in stubs/wallet routes provide fallback repair.
 
 ### Client-side Auth (`lib/auth-client.ts`)
 - Creates auth client with `better-auth/react`
@@ -59,13 +69,14 @@ This is a **Telegram Mini App** using Better Auth for authentication.
 - Uses `toNextJsHandler(auth.handler)` to handle auth requests
 
 ### Mini App Integration (`providers/telegram-auth-provider.tsx`)
-- Uses `@tma.js/sdk` with `init()` and `retrieveRawInitData()` for Telegram SDK access
-- Implements state machine: `idle` → `loading` → `authenticated`/`unauthenticated`/`error`
+- Uses `@telegram-apps/sdk-react` with `useRawInitData()` hook for Telegram SDK access
+- Implements state machine with reducer: `loading` → `authenticated`/`unauthenticated`/`error`
 - Auto-signs in via `authClient.signInWithMiniApp(initData)` on mount
 - Checks existing session first, validates against current Telegram user
 - Handles session mismatch by signing out and re-authenticating
 - Provides `useTelegramAuth()` hook via context for consuming auth state
 - Runs once per session using `useRef` guard
+- Shows progress UI during authentication flow
 
 ### Auth Hook (`hooks/use-telegram-auth.ts`)
 - Exports `TelegramAuthContext` and `useTelegramAuth()` hook
@@ -251,7 +262,7 @@ prisma/
 
 ## Layout Structure
 
-The root layout (`app/layout.tsx`) wraps the app with `TelegramAuthProvider`. The TMA.js SDK (`@tma.js/sdk`) handles Telegram WebApp script loading automatically via its `init()` function, so no manual script tag is needed. The layout includes:
+The root layout (`app/layout.tsx`) wraps the app with `TelegramAuthProvider`. The Telegram SDK (`@telegram-apps/sdk-react`) handles Telegram WebApp initialization automatically. The layout includes:
 - Top navbar (fixed)
 - Main content area (with padding for navbars)
 - Bottom navigation bar (fixed)
@@ -328,7 +339,7 @@ This pattern provides a type-safe state machine for authentication flows with cl
 ### Auth & Telegram
 - **better-auth** (1.5.1): Authentication server
 - **better-auth-telegram** (1.4.0): Telegram OAuth integration
-- **@tma.js/sdk-react** (3.0.16): Telegram Mini App SDK
+- **@telegram-apps/sdk-react** (3.3.9): Telegram Mini App SDK
 - **grammy** (1.40.0): Telegram bot framework
 
 ### API & Type Safety

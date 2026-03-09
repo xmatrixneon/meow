@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
 import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
@@ -340,22 +340,67 @@ export default function MiniAppPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [serviceOffset, setServiceOffset] = useState(0);
+  const [accumulatedServices, setAccumulatedServices] = useState<Service[]>([]);
   const [selected, setSelected] = useState<Service | null>(null);
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [buying, setBuying] = useState<string | null>(null);
   const [bought, setBought] = useState<string | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
     setServiceOffset(0);
+    setAccumulatedServices([]);
   }, [debouncedSearch]);
 
-  const { data: servicesData, isLoading: isLoadingServices } =
+  const { data: servicesData, isLoading: isLoadingServices, isFetching } =
     trpc.service.list.useQuery(
       { search: debouncedSearch, limit: 20, offset: serviceOffset },
       { staleTime: 5 * 60 * 1000 },
     );
+
+  // Accumulate services as we load more
+  useEffect(() => {
+    if (servicesData?.services) {
+      const newServices = servicesData.services.map((s) => ({
+        id: s.id,
+        name: s.name,
+        emoji: String(s.basePrice ?? ""),
+        category: "Service",
+      }));
+
+      if (serviceOffset === 0) {
+        setAccumulatedServices(newServices);
+      } else {
+        setAccumulatedServices((prev) => {
+          const existingIds = new Set(prev.map((s) => s.id));
+          const uniqueNew = newServices.filter((s) => !existingIds.has(s.id));
+          return [...prev, ...uniqueNew];
+        });
+      }
+    }
+  }, [servicesData?.services, serviceOffset]);
+
+  // Intersection Observer for infinite scroll on services
+  useEffect(() => {
+    if (!servicesData?.hasMore || isFetching) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && servicesData?.hasMore && !isFetching) {
+          setServiceOffset((prev) => prev + 20);
+        }
+      },
+      { threshold: 0.1, rootMargin: "100px" },
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [servicesData?.hasMore, isFetching]);
   const { data: serversData } = trpc.service.servers.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
@@ -409,13 +454,7 @@ export default function MiniAppPage() {
     },
   });
 
-  const services: Service[] =
-    servicesData?.services.map((s) => ({
-      id: s.id,
-      name: s.name,
-      emoji: String(s.basePrice ?? ""),
-      category: "Service",
-    })) || [];
+  const services = accumulatedServices;
 
   const servers: ServerOption[] =
     serversData?.servers.map((s: any) => ({
@@ -472,12 +511,6 @@ export default function MiniAppPage() {
       serverId: serverId,
     });
   };
-
-  const handleLoadMore = useCallback(() => {
-    if (servicesData?.hasMore) {
-      setServiceOffset((prev) => prev + 20);
-    }
-  }, [servicesData?.hasMore]);
 
   if (isPending && !user) {
     return <PageSkeleton />;
@@ -580,16 +613,17 @@ export default function MiniAppPage() {
               </AnimatePresence>
 
               {servicesData?.hasMore && (
-                <div className="flex justify-center pt-4 pb-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleLoadMore}
-                    disabled={isLoadingServices}
-                    className="text-xs"
-                  >
-                    {isLoadingServices ? "Loading..." : "Load More Services"}
-                  </Button>
+                <div ref={loadMoreRef} className="flex justify-center pt-4 pb-1">
+                  {isFetching && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                        className="w-4 h-4 rounded-full border-2 border-primary/30 border-t-primary"
+                      />
+                      <span className="text-sm">Loading more...</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -169,6 +169,73 @@ export const walletRouter = createTRPCRouter({
     }),
 
   /**
+   * Transaction history with infinite scroll (cursor-based pagination).
+   * Used for true infinite scrolling in the history page.
+   */
+  transactionsInfinite: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(30),
+        cursor: z.string().optional(), // ISO date string for cursor
+        status: z
+          .enum(["ALL", "COMPLETED", "PENDING", "FAILED"])
+          .default("ALL"),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      const { limit, cursor, status } = input;
+
+      const wallet = await prisma.wallet.findUnique({ where: { userId } });
+
+      if (!wallet) {
+        return { transactions: [], nextCursor: null, total: 0 };
+      }
+
+      const baseWhere = { walletId: wallet.id };
+      const where = {
+        ...baseWhere,
+        ...(status !== "ALL" && { status: status as TransactionStatus }),
+        ...(cursor && { createdAt: { lt: new Date(cursor) } }),
+      };
+
+      const [total, transactions] = await Promise.all([
+        prisma.transaction.count({
+          where: status === "ALL" ? baseWhere : { ...baseWhere, status: status as TransactionStatus },
+        }),
+        prisma.transaction.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          take: limit + 1, // Fetch one extra to determine if there's more
+        }),
+      ]);
+
+      let nextCursor: string | null = null;
+      if (transactions.length > limit) {
+        const lastItem = transactions.pop()!;
+        nextCursor = lastItem.createdAt.toISOString();
+      }
+
+      const formattedTransactions = transactions.map((tx) => ({
+        id: tx.id,
+        type: tx.type,
+        amount: toNumber(tx.amount),
+        status: tx.status,
+        description: tx.description,
+        txnId: tx.txnId,
+        phoneNumber: tx.phoneNumber,
+        metadata: tx.metadata,
+        createdAt: tx.createdAt.toISOString(),
+      }));
+
+      return {
+        transactions: formattedTransactions,
+        nextCursor,
+        total,
+      };
+    }),
+
+  /**
    * Deposit via UTR (race-safe).
    *
    * Flow:
@@ -418,6 +485,16 @@ export const walletRouter = createTRPCRouter({
       }
 
       if (promocode.usedCount >= promocode.maxUses) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid promo code.",
+        });
+      }
+
+      // SECURITY: Validate promo amount is within reasonable bounds.
+      // Prevents accidental or malicious creation of excessively large promo codes.
+      const MAX_PROMO_AMOUNT = new Decimal(1000);
+      if (promocode.amount.greaterThan(MAX_PROMO_AMOUNT)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Invalid promo code.",
