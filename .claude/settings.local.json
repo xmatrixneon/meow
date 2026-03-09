@@ -99,7 +99,14 @@
       "Bash(pm2 show meowsms-fetch 2>&1 | grep -E \"\\(script path|exec cwd|pwd\\)\")",
       "Bash(pm2 restart meowsms-fetch && sleep 3 && pm2 status meowsms-fetch)",
       "Bash(pm2 logs meowsms-fetch --lines 10 --nostream 2>&1)",
-      "Bash(pm2 reload ecosystem.config.js)"
+      "Bash(pm2 reload ecosystem.config.js)",
+      "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getNumber&service=test&country=22\" 2>&1 | head -20)",
+      "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getBalance\" 2>&1)",
+      "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getNumbersStatus&country=22\" 2>&1)",
+      "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getNumber&service=whatsapp&country=22\" 2>&1)",
+      "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getNumber&service=telegram&country=22\" 2>&1)",
+      "Bash(npx tsc --noEmit 2>&1 | head -30)",
+      "Bash(npx tsc --noEmit 2>&1 | head -20)"
     ]
   }
 }

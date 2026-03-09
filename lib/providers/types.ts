@@ -10,6 +10,8 @@ export interface GetNumberResponse {
   orderId?: string;
   phoneNumber?: string;
   error?: string;
+  /** Raw error code from provider (e.g., "NO_NUMBER", "NO_BALANCE") */
+  errorCode?: OtpProviderErrorCode;
 }
 
 /**

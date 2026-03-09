@@ -330,8 +330,9 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
 
   if (!result.success || !result.phoneNumber || !result.orderId) {
     await handleProviderFailure(orderId, finalPrice, user.id);
-    const err = result.error ?? "";
-    if (err.includes("NO_NUMBER") || err.includes("NO_NUMBERS")) {
+    // Check raw error code from provider (not parsed message)
+    const errorCode = result.errorCode;
+    if (errorCode === "NO_NUMBER" || errorCode === "NO_NUMBERS") {
       return new NextResponse("NO_API_NUMBER", { status: 200, headers: corsHeaders });
     }
     return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });

@@ -92,7 +92,7 @@ export class OtpProviderClient {
       const response = await this.makeRequest('getNumber', { service, country });
 
       if (this.isErrorCode(response)) {
-        return { success: false, error: this.parseError(response) };
+        return { success: false, error: this.parseError(response), errorCode: response };
       }
 
       if (response.startsWith('ACCESS_NUMBER:')) {

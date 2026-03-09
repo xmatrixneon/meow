@@ -311,9 +311,19 @@ export const numberRouter = createTRPCRouter({
 
     if (!numberResponse.success || !numberResponse.orderId || !numberResponse.phoneNumber) {
       await handleBuyFailure(orderId, finalPrice, userId);
+      // Use raw error code for better error messages
+      const errorCode = numberResponse.errorCode;
+      let errorMessage = numberResponse.error ?? "Failed to get phone number from provider";
+      if (errorCode === "NO_NUMBER" || errorCode === "NO_NUMBERS") {
+        errorMessage = "No numbers available from provider";
+      } else if (errorCode === "NO_BALANCE") {
+        errorMessage = "Provider has insufficient balance";
+      } else if (errorCode === "BAD_SERVICE") {
+        errorMessage = "Service not available on provider";
+      }
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: numberResponse.error ?? "Failed to get phone number from provider",
+        message: errorMessage,
       });
     }
 

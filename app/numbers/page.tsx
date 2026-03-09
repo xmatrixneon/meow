@@ -574,9 +574,13 @@ export default function NumbersPage() {
       setBuyingNextNumberId(null);
     },
     onError: (err) => {
-      toast.error(
-        err.message?.includes("balance") ? "Insufficient balance." : err.message || "Failed",
-      );
+      let msg = err.message || "Failed";
+      if (msg.includes("balance")) {
+        msg = "Insufficient balance.";
+      } else if (msg.includes("No numbers available") || msg.includes("NO_NUMBER")) {
+        msg = "No numbers available right now. Try again later.";
+      }
+      toast.error(msg);
       setBuyingNextNumberId(null);
     },
   });

@@ -455,6 +455,8 @@ export default function MiniAppPage() {
       let msg = error.message || "Failed to assign number";
       if (msg.includes("balance") || msg.includes("INSUFFICIENT"))
         msg = "Insufficient balance.";
+      else if (msg.includes("No numbers available") || msg.includes("NO_NUMBER"))
+        msg = "No numbers available right now. Try again later.";
       else if (msg.includes("service") || msg.includes("AVAILABLE"))
         msg = "Service temporarily unavailable.";
       toast.error(msg);
