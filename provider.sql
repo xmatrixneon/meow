@@ -26,7 +26,7 @@ INSERT INTO "ApiCredential" (
   'maya',                           -- ← CHANGE THIS: your CattySMS API key
   true, NOW(), NOW()
 )
-ON CONFLICT ("id") DO NOTHING;
+ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "code" = EXCLUDED."code", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
 
 
 -- ============================================================
@@ -40,7 +40,7 @@ INSERT INTO "OtpServer" (
   'india', 'India', '22', 'IN', 'India',
   NULL, 'cattysms', true, NOW(), NOW()
 )
-ON CONFLICT ("id") DO NOTHING;
+ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "code" = EXCLUDED."code", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
 
 
 -- ============================================================
@@ -297,7 +297,6 @@ INSERT INTO "Service" (
 ('slotwinner',      'slotwinner',     'Slot Winner',         'india',  7.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('novamines',       'novamines',      'Nova Mines',          'india',  6.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('ncfun',           'ncfun',          'NcFun',               'india',  8.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
-('playkaro2',       'playkaro',       'Playkaro',            'india',  9.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('storm',           'storm',          'Storm',               'india',  5.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('tiranga',         'tiranga',        'Tiranga',             'india',  7.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
 ('singham',         'singham',        'Singham',             'india',  6.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW()),
@@ -351,7 +350,7 @@ INSERT INTO "Service" (
 -- TEST
 ('test-service',    'TEST',           'Test Service',        'india',  5.00, 'https://i.ibb.co/kgBcLZsX/meow.png', true, NOW(), NOW())
 
-ON CONFLICT ("id") DO NOTHING;
+ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "code" = EXCLUDED."code", "basePrice" = EXCLUDED."basePrice", "iconUrl" = EXCLUDED."iconUrl", "isActive" = EXCLUDED."isActive", "updatedAt" = EXCLUDED."updatedAt";
 
 
 -- ============================================================
