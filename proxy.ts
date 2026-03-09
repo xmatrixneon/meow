@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
  * Middleware Configuration
  *
  * This middleware handles:
- * 1. Admin route protection - only users with isAdmin can access /admin/* routes
  * 2. Public API access - allows /api/stubs/* for external API calls
  * 3. Route exclusions - skips static files and internal routes
  */

@@ -137,7 +137,7 @@ export default function ProfilePage() {
   const { data: session, isPending } = authClient.useSession();
   const user = session?.user as User | undefined;
 
-  const { data: settings } = trpc.service.settings.useQuery();
+  const { data: settings } = trpc.service.protectedSettings.useQuery();
   const { data: walletData } = trpc.wallet.balance.useQuery(undefined, { enabled: !!user });
   const { data: apiKeyData, refetch: refetchApiKey } = trpc.apiKey.get.useQuery(undefined, { enabled: !!user });
 

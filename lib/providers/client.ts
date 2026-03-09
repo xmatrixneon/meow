@@ -143,7 +143,10 @@ export class OtpProviderClient {
 
       return { status: 'WAITING' }; // safe default — don't cancel on unknown response
     } catch (error) {
-      // FIX: transient errors return WAITING so poller doesn't crash or cancel valid orders
+      // Log in development for debugging, but don't crash the poller
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[OTP] getStatus network error:', error instanceof Error ? error.message : error);
+      }
       return { status: 'WAITING' };
     }
   }

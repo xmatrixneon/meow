@@ -178,7 +178,7 @@ export default function WalletPage() {
     refetchInterval: 60000,
   });
   const { data: transactionsData } = trpc.wallet.transactions.useQuery({ limit: 10 });
-  const { data: settings } = trpc.service.settings.useQuery();
+  const { data: settings } = trpc.service.protectedSettings.useQuery();
 
   const balance = Number(walletData?.balance ?? 0);
   const totalSpent = Number(walletData?.totalSpent ?? 0);

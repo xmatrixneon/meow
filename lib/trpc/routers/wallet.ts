@@ -176,7 +176,7 @@ export const walletRouter = createTRPCRouter({
     .input(
       z.object({
         limit: z.number().min(1).max(100).default(30),
-        cursor: z.string().optional(), // ISO date string for cursor
+        cursor: z.string().datetime({ message: "Invalid cursor format", local: true }).optional(),
         status: z
           .enum(["ALL", "COMPLETED", "PENDING", "FAILED"])
           .default("ALL"),
