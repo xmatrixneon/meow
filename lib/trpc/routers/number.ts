@@ -258,7 +258,7 @@ export const numberRouter = createTRPCRouter({
 
     const finalPrice = await calculateFinalPrice(userId, service.id, service.basePrice);
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
-    const expiryMinutes = settings?.numberExpiryMinutes ?? 15;
+    const expiryMinutes = settings?.numberExpiryMinutes ?? 20;
     const orderId = nanoid(16);
 
     // Step 1: Check balance, then deduct atomically
