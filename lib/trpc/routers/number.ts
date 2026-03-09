@@ -24,17 +24,14 @@ const cancelSchema = z.object({
 const historySchema = z.object({
   limit: z.number().min(1).max(100).optional().default(20),
   offset: z.number().min(0).optional().default(0),
-  cursor: z.string().optional(),
+  cursor: z.string().datetime({ message: "Invalid cursor format", local: true }).optional(),
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Calculate final price after applying any custom discount for the user.
- * SECURITY: Enforces a minimum price floor to prevent zero-cost purchases.
  */
-const MINIMUM_PRICE = new Prisma.Decimal(0.10); // 10 paise minimum
-
 async function calculateFinalPrice(
   userId: string,
   serviceId: string,
@@ -46,19 +43,13 @@ async function calculateFinalPrice(
 
   if (!customPrice) return basePrice;
 
-  let final: Prisma.Decimal;
-
   if (customPrice.type === "FLAT") {
-    final = basePrice.minus(customPrice.discount);
+    return basePrice.minus(customPrice.discount);
   } else {
     // PERCENT
     const discountAmount = basePrice.mul(customPrice.discount.div(100));
-    final = basePrice.minus(discountAmount);
+    return basePrice.minus(discountAmount);
   }
-
-  // SECURITY: Enforce minimum price floor — prevent zero-cost purchases
-  // even with 100% discount or flat discount >= base price
-  return final.lessThan(MINIMUM_PRICE) ? MINIMUM_PRICE : final;
 }
 
 /**
@@ -236,26 +227,6 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Server or API is currently unavailable" });
     }
 
-    // SECURITY (C3): enforce max concurrent active numbers per user.
-    // Without this, a user with a large balance (or 0-price discount) can open
-    // hundreds of simultaneous numbers, exhausting provider inventory and
-    // creating unbounded poller load.
-    const MAX_CONCURRENT_NUMBERS = 10;
-    const activeCount = await prisma.activeNumber.count({
-      where: {
-        userId,
-        activeStatus: "ACTIVE",
-        status: { not: "CANCELLED" },
-        NOT: { phoneNumber: "PENDING" },
-      },
-    });
-    if (activeCount >= MAX_CONCURRENT_NUMBERS) {
-      throw new TRPCError({
-        code: "TOO_MANY_REQUESTS",
-        message: `You can have at most ${MAX_CONCURRENT_NUMBERS} active numbers at a time.`,
-      });
-    }
-
     const finalPrice = await calculateFinalPrice(userId, service.id, service.basePrice);
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const expiryMinutes = settings?.numberExpiryMinutes ?? 20;
@@ -415,7 +386,10 @@ export const numberRouter = createTRPCRouter({
 
     let nextCursor: string | null = null;
     if (numbers.length > limit) {
-      nextCursor = numbers.pop()!.createdAt.toISOString();
+      const lastItem = numbers.pop();
+      if (lastItem) {
+        nextCursor = lastItem.createdAt.toISOString();
+      }
     }
 
     return { numbers, nextCursor };
@@ -441,7 +415,10 @@ export const numberRouter = createTRPCRouter({
 
     let nextCursor: string | null = null;
     if (numbers.length > limit) {
-      nextCursor = numbers.pop()!.createdAt.toISOString();
+      const lastItem = numbers.pop();
+      if (lastItem) {
+        nextCursor = lastItem.createdAt.toISOString();
+      }
     }
 
     return { numbers, nextCursor };

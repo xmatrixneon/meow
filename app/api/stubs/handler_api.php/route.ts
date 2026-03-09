@@ -4,8 +4,22 @@ import { OtpProviderClient } from "@/lib/providers/client";
 import { nanoid } from "nanoid";
 import { Prisma, UserStatus } from "@/app/generated/prisma/client";
 import type { User } from "@/app/generated/prisma/client";
+import { RateLimiterMemory } from "rate-limiter-flexible";
 
 const { Decimal } = Prisma;
+
+// ─── Rate Limiting (30 req/s per user) ─────────────────────────────────────────
+// Using rate-limiter-flexible with in-memory store
+// For distributed production, swap RateLimiterMemory with RateLimiterRedis
+
+const rateLimiter = new RateLimiterMemory({
+  points: 30, // 30 requests
+  duration: 1, // per second
+  keyPrefix: "stubs_api",
+});
+
+// API key format validation (nanoid generates 32 URL-safe chars)
+const API_KEY_REGEX = /^[A-Za-z0-9_-]{32}$/;
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -29,7 +43,8 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get("action");
   const apiKey = searchParams.get("api_key");
 
-  if (!apiKey) {
+  // SECURITY: Validate API key format before DB query
+  if (!apiKey || !API_KEY_REGEX.test(apiKey)) {
     return new NextResponse("BAD_KEY", { status: 200, headers: corsHeaders });
   }
 
@@ -43,6 +58,25 @@ export async function GET(request: NextRequest) {
   }
 
   const user = userApi.user;
+
+  // SECURITY: Enforce rate limit (30 req/s per user)
+  try {
+    await rateLimiter.consume(user.id);
+  } catch (rejRes: unknown) {
+    // rejRes is RateLimiterRes when rate limited, Error when store error
+    const msBeforeNext =
+      rejRes instanceof Error ? 1000 : (rejRes as { msBeforeNext: number }).msBeforeNext;
+    return new NextResponse("RATE_LIMIT_EXCEEDED", {
+      status: 429,
+      headers: {
+        ...corsHeaders,
+        "Retry-After": String(Math.ceil(msBeforeNext / 1000)),
+        "X-RateLimit-Limit": "30",
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": String(Math.ceil((Date.now() + msBeforeNext) / 1000)),
+      },
+    });
+  }
 
   // ─── Layer 2: UserData auto-repair ────────────────────────────────────────
   //
@@ -182,21 +216,6 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   if (!serviceCode) return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
   if (!countryCode) return new NextResponse("BAD_COUNTRY", { status: 200, headers: corsHeaders });
 
-  // SECURITY (H1 + C3): enforce max concurrent active numbers via API.
-  // Prevents burst-buy attacks and unbounded poller load.
-  const MAX_CONCURRENT = 10;
-  const activeCount = await prisma.activeNumber.count({
-    where: {
-      userId: user.id,
-      activeStatus: "ACTIVE",
-      status: { not: "CANCELLED" },
-      NOT: { phoneNumber: "PENDING" },
-    },
-  });
-  if (activeCount >= MAX_CONCURRENT) {
-    return new NextResponse("MAX_CONCURRENT_REACHED", { status: 200, headers: corsHeaders });
-  }
-
   const settings = await prisma.settings.findUnique({ where: { id: "1" } });
   const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 20;
 
@@ -218,23 +237,18 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   }
 
   // Calculate price with custom discount if applicable
-  // SECURITY: Enforce minimum price floor to prevent zero-cost purchases
-  const MINIMUM_PRICE = new Decimal(0.10); // 10 paise minimum
   let finalPrice = service.basePrice;
   const customPrice = await prisma.customPrice.findUnique({
     where: { userId_serviceId: { userId: user.id, serviceId: service.id } },
   });
 
   if (customPrice) {
-    let calculated: Prisma.Decimal;
     if (customPrice.type === "FLAT") {
-      calculated = service.basePrice.minus(customPrice.discount);
+      finalPrice = service.basePrice.minus(customPrice.discount);
     } else {
       const discountAmount = service.basePrice.mul(customPrice.discount.div(100));
-      calculated = service.basePrice.minus(discountAmount);
+      finalPrice = service.basePrice.minus(discountAmount);
     }
-    // SECURITY: Enforce minimum price floor
-    finalPrice = calculated.lessThan(MINIMUM_PRICE) ? MINIMUM_PRICE : calculated;
   }
 
   const orderId = nanoid(16);

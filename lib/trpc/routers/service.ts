@@ -12,7 +12,8 @@ const listInputSchema = z.object({
 
 export const serviceRouter = createTRPCRouter({
   /**
-   * Get public app settings.
+   * Get PUBLIC app settings (no auth required).
+   * Only exposes non-sensitive configuration needed for the UI.
    */
   settings: publicProcedure.query(async () => {
     try {
@@ -25,13 +26,35 @@ export const serviceRouter = createTRPCRouter({
           settings?.currency === "INR"
             ? "₹"
             : settings?.currency ?? "₹",
+        numberExpiryMinutes: settings?.numberExpiryMinutes ?? 20,
+        minCancelMinutes: settings?.minCancelMinutes ?? 2,
+      };
+    } catch (error) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to fetch settings",
+        cause: error,
+      });
+    }
+  }),
+
+  /**
+   * Get PROTECTED app settings (requires authentication).
+   * Exposes payment configuration and other sensitive settings.
+   */
+  protectedSettings: protectedProcedure.query(async () => {
+    try {
+      const settings = await prisma.settings.findUnique({
+        where: { id: "1" },
+      });
+
+      return {
         bharatpeQrImage: settings?.bharatpeQrImage,
         upiId: settings?.upiId,
-        minCancelMinutes: settings?.minCancelMinutes ?? 2,
         minRechargeAmount: settings?.minRechargeAmount,
+        maxRechargeAmount: settings?.maxRechargeAmount,
         referralPercent: settings?.referralPercent,
         minRedeem: settings?.minRedeem,
-        numberExpiryMinutes: settings?.numberExpiryMinutes,
         telegramHelpUrl: settings?.telegramHelpUrl,
         telegramSupportUsername: settings?.telegramSupportUsername,
         apiDocsBaseUrl: settings?.apiDocsBaseUrl,
@@ -46,9 +69,9 @@ export const serviceRouter = createTRPCRouter({
   }),
 
   /**
-   * List all active services with server info
+   * List all active services with server info (requires authentication)
    */
-  listWithServers: publicProcedure.query(async () => {
+  listWithServers: protectedProcedure.query(async () => {
     const services = await prisma.service.findMany({
       where: {
         isActive: true,

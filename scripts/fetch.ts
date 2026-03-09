@@ -2,25 +2,16 @@ import { config } from 'dotenv';
 config({ path: '.env' });
 
 import {
-  PrismaClient,
   NumberStatus,
   ActiveStatus,
   Prisma,
 } from '../app/generated/prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
+import { prisma } from '../lib/db';
 import { OtpProviderClient } from '../lib/providers/client';
 
-// SECURITY: fail fast if DATABASE_URL is missing — Pool() accepts undefined
-// but only errors on the first query, producing a confusing message far from
-// the real cause.
-if (!process.env.DATABASE_URL) {
-  console.error('[otp-poller] FATAL: DATABASE_URL is not set. Exiting.');
-  process.exit(1);
-}
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+// Note: We reuse the shared prisma instance from lib/db.ts which has its own
+// connection pool. For a standalone script, we need to handle cleanup ourselves.
+// The pool is managed globally in lib/db.ts.
 
 const _rawInterval = parseInt(process.env.POLL_INTERVAL ?? '5000', 10);
 // BUG GUARD: parseInt returns NaN for garbage strings (e.g. 'fast'); 
@@ -444,12 +435,11 @@ async function run(): Promise<void> {
     }
   }
 
-  // FIX (Bug 5): clean shutdown — disconnect both prisma AND pg pool
+  // FIX (Bug 5): clean shutdown — disconnect prisma
   async function shutdown(signal: string): Promise<void> {
     console.log(`[otp-poller] shutting down (${signal})`);
     clearInterval(intervalHandle);
     await prisma.$disconnect();
-    await pool.end();
     process.exit(0);
   }
 
