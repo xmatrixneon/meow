@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { IndianRupee, Copy, CheckCheck, Loader2 } from "lucide-react";
+import { IndianRupee, Copy, CheckCheck, Loader2, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,7 @@ interface DepositDialogProps {
 export function DepositDialog({ open, onOpenChange, upiId, qrImage, onSuccess }: DepositDialogProps) {
   const [utr, setUtr] = useState("");
   const [copied, setCopied] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
 
   const depositMutation = trpc.wallet.deposit.useMutation({
     onSuccess: (data) => {
@@ -36,15 +37,11 @@ export function DepositDialog({ open, onOpenChange, upiId, qrImage, onSuccess }:
         onSuccess();
         onOpenChange(false);
       } else {
-        // Handle validation errors returned from API (success: false)
         toast.error(data.message || "Failed to verify payment");
       }
     },
     onError: (error) => {
-      // Always prefer the server's message — it's specific and correct.
-      // Only fall back to generic messages for network/unknown errors.
       const msg = error.message || "";
-
       if (msg.includes("already")) {
         toast.error("This UTR has already been used.");
       } else if (msg.includes("not found") || msg.includes("NOT_FOUND")) {
@@ -74,17 +71,41 @@ export function DepositDialog({ open, onOpenChange, upiId, qrImage, onSuccess }:
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(val) => { setTooltipOpen(false); onOpenChange(val); }}>
       <DialogContent className="rounded-3xl max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="space-y-2 pb-4">
           <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <IndianRupee size={20} className="text-amber-500 flex-shrink-0" />
             <span className="truncate">Add Funds via UPI</span>
+            <button
+              type="button"
+              className="ml-1 text-muted-foreground hover:text-amber-500 transition-colors focus:outline-none rounded-full"
+              aria-label="Deposit info"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTooltipOpen((prev) => !prev);
+              }}
+            >
+              <Info size={15} />
+            </button>
           </DialogTitle>
           <DialogDescription className="text-sm">
             Scan QR or send payment to the UPI ID below
           </DialogDescription>
         </DialogHeader>
+
+        {/* Inline info panel */}
+        {tooltipOpen && (
+          <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs leading-relaxed -mt-2">
+            <p className="font-semibold mb-1.5 text-amber-700 dark:text-amber-300">How to deposit</p>
+            <ul className="space-y-1 text-amber-600 dark:text-amber-400">
+              <li>• Scan the QR or copy the UPI ID to pay</li>
+              <li>• Enter the 12-digit UTR from your payment app</li>
+              <li>• Funds are credited after verification</li>
+              <li>• Each UTR can only be used once</li>
+            </ul>
+          </div>
+        )}
 
         <div className="space-y-4 sm:space-y-5">
           {/* QR Code Image */}
