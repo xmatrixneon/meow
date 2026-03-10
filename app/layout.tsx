@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/providers";
 import { TRPCProvider } from "@/lib/trpc";
 import { TelegramGate } from "@/components/telegram-gate";
+import { MaintenanceModeGuard } from "@/components/maintenance-mode-guard";
 import { Navbar } from "@/components/navbar";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
 import { Toaster } from "@/components/ui/sonner";
@@ -41,13 +42,14 @@ export default function RootLayout({
         {/*
          * Provider tree (order matters):
          *
-         * Providers        — TelegramAuthProvider loaded with ssr:false
-         *   TRPCProvider   — React Query + tRPC
-         *     TelegramGate — blocks UI until auth resolves
-         *       Navbar
-         *       main
-         *       BottomNavBar
-         *       Toaster
+         * Providers              — TelegramAuthProvider loaded with ssr:false
+         *   TRPCProvider         — React Query + tRPC
+         *     MaintenanceModeGuard — checks maintenance mode before auth
+         *       TelegramGate     — blocks UI until auth resolves
+         *         Navbar
+         *         main
+         *         BottomNavBar
+         *         Toaster
          *
          * NO <Script> tag for telegram-web-app.js — we use @telegram-apps/sdk-react
          * which reads initData from the URL hash synchronously. The script tag
@@ -55,12 +57,14 @@ export default function RootLayout({
          */}
         <Providers>
           <TRPCProvider>
-            <TelegramGate>
-              <Navbar />
-              <main className="pt-14 pb-16">{children}</main>
-              <BottomNavBar />
-              <Toaster position="top-center" />
-            </TelegramGate>
+            <MaintenanceModeGuard>
+              <TelegramGate>
+                <Navbar />
+                <main className="pt-14 pb-16">{children}</main>
+                <BottomNavBar />
+                <Toaster position="top-center" />
+              </TelegramGate>
+            </MaintenanceModeGuard>
           </TRPCProvider>
         </Providers>
       </body>
