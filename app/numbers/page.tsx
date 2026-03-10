@@ -262,13 +262,18 @@ function NumberCard({
   const [expiresIn, setExpiresIn] = useState(() =>
     formatTimeRemaining(item.expiresAt),
   );
+  const [isExpired, setIsExpired] = useState(
+    () => item.expiresAt.getTime() - Date.now() <= 0,
+  );
   const [cancelRemainingMs, setCancelRemainingMs] = useState(() =>
     Math.max(0, minCancelMs - (Date.now() - item.buyTime.getTime())),
   );
 
   useEffect(() => {
     const interval = setInterval(() => {
+      const diff = item.expiresAt.getTime() - Date.now();
       setExpiresIn(formatTimeRemaining(item.expiresAt));
+      setIsExpired(diff <= 0);
       setCancelRemainingMs(
         Math.max(0, minCancelMs - (Date.now() - item.buyTime.getTime())),
       );
@@ -280,11 +285,18 @@ function NumberCard({
   const isCancelled = item.status === "cancelled";
   const canCancel = cancelRemainingMs === 0;
   const isCancelling = cancellingId === item.orderId;
-  const displayStatus: TabValue = hasSms
-    ? "received"
-    : isCancelled
-      ? "cancelled"
+
+  // ── FIX: derive displayStatus independently from hasSms so the
+  //    timer is not gated behind !hasSms ──────────────────────────
+  const displayStatus: TabValue = isCancelled
+    ? "cancelled"
+    : hasSms
+      ? "received"
       : "waiting";
+
+  // The number is still "active" (came from the waiting list) when it is
+  // not cancelled — we use this to decide whether to show the countdown.
+  const isActive = !isCancelled;
 
   const statusMap = {
     received: {
@@ -353,15 +365,25 @@ function NumberCard({
           </p>
         </div>
 
-        {/* Countdown timer - only for waiting numbers */}
-        {displayStatus === "waiting" && !hasSms && (
+        {/* ── FIX: show countdown for ALL active (non-cancelled) numbers,
+               regardless of whether an SMS has been received ── */}
+        {isActive && !isExpired && (
           <div className="flex items-center gap-1 shrink-0">
-            <Timer size={11} className="text-amber-500" />
-            <span className="text-xs font-mono font-bold tabular-nums text-amber-500">
+            <Timer
+              size={11}
+              className={hasSms ? "text-green-500" : "text-amber-500"}
+            />
+            <span
+              className={cn(
+                "text-xs font-mono font-bold tabular-nums",
+                hasSms ? "text-green-500" : "text-amber-500",
+              )}
+            >
               {expiresIn}
             </span>
           </div>
         )}
+
         {/* Time ago for cancelled numbers */}
         {isCancelled && item.updatedAt && (
           <div className="flex items-center gap-1 shrink-0 text-muted-foreground">
@@ -371,8 +393,9 @@ function NumberCard({
             </span>
           </div>
         )}
-        {/* Time ago for received numbers */}
-        {displayStatus === "received" && item.updatedAt && (
+
+        {/* Time ago for received numbers once expired */}
+        {displayStatus === "received" && isExpired && item.updatedAt && (
           <div className="flex items-center gap-1 shrink-0 text-green-500">
             <CheckCheck size={11} />
             <span className="text-xs font-medium">

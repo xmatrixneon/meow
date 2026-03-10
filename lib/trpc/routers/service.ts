@@ -22,10 +22,7 @@ export const serviceRouter = createTRPCRouter({
       });
 
       return {
-        currency:
-          settings?.currency === "INR"
-            ? "₹"
-            : settings?.currency ?? "₹",
+        currency: settings?.currency ?? "₹",
         numberExpiryMinutes: settings?.numberExpiryMinutes ?? 20,
         minCancelMinutes: settings?.minCancelMinutes ?? 2,
         maintenanceMode: settings?.maintenanceMode ?? false,

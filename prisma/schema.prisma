@@ -1,4 +1,5 @@
 // prisma/schema.prisma
+
 generator client {
   provider = "prisma-client"
   output   = "../app/generated/prisma"
@@ -7,6 +8,8 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum TransactionType {
   DEPOSIT
@@ -24,8 +27,8 @@ enum TransactionStatus {
 }
 
 enum NumberStatus {
-  COMPLETED
   PENDING
+  COMPLETED
   CANCELLED
 }
 
@@ -46,62 +49,68 @@ enum UserStatus {
   SUSPENDED
 }
 
+// ─── Auth models ──────────────────────────────────────────────────────────────
+
 model User {
-  id              String    @id @default(cuid())
-  email           String?   @unique
-  emailVerified   Boolean   @default(false)
-  name            String?
-  image           String?
-  telegramId           String   @unique
-  telegramUsername     String?
-  firstName            String?
-  lastName             String?
-  languageCode         String?
-  isPremium            Boolean? @default(false)
-  allowsWriteToPm      Boolean? @default(false)
-  photoUrl             String?
-  addedToAttachmentMenu Boolean? @default(false)
-  authDate        DateTime?
-  queryId         String?
-  chatInstance    String?
-  chatType        String?
-  startParam      String?
-  canSendAfter    Int?
-  isAdmin         Boolean   @default(false)
-  deletedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  accounts        Account[]
-  sessions        Session[]
-  wallet          Wallet?
-  numbers         ActiveNumber[]
-  customPrices    CustomPrice[]
-  promoHistory    PromocodeHistory[]
-  auditLogsAsTarget    UserAuditLog[] @relation("AuditTarget")
-  auditLogsAsPerformer UserAuditLog[] @relation("AuditPerformer")
-  userApi         UserApi?
-  userData        UserData?
+  id                    String    @id @default(cuid())
+  email                 String?   @unique
+  emailVerified         Boolean   @default(false)
+  name                  String?
+  image                 String?
+  telegramId            String    @unique
+  telegramUsername      String?
+  firstName             String?
+  lastName              String?
+  languageCode          String?
+  isPremium             Boolean?  @default(false)
+  allowsWriteToPm       Boolean?  @default(false)
+  photoUrl              String?
+  addedToAttachmentMenu Boolean?  @default(false)
+  authDate              DateTime?
+  queryId               String?
+  chatInstance          String?
+  chatType              String?
+  startParam            String?
+  canSendAfter          Int?
+  isAdmin               Boolean   @default(false)
+  deletedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  wallet               Wallet?
+  numbers              ActiveNumber[]
+  customPrices         CustomPrice[]
+  promoHistory         PromocodeHistory[]
+  auditLogsAsTarget    UserAuditLog[]     @relation("AuditTarget")
+  auditLogsAsPerformer UserAuditLog[]     @relation("AuditPerformer")
+  userApi              UserApi?
+  userData             UserData?
 }
 
 model Account {
-  id           String    @id @default(cuid())
-  userId       String
-  type         String    @default("oauth")
-  providerId   String
-  accountId    String
-  refreshToken String?   @default("")
-  accessToken  String?   @default("")
-  expiresAt    DateTime?
-  tokenType    String?   @default("")
-  scope        String?   @default("")
-  idToken      String?   @default("")
-  sessionState String?   @default("")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  userId           String
+  type             String    @default("oauth")
+  providerId       String
+  accountId        String
+  refreshToken     String?   @default("")
+  accessToken      String?   @default("")
+  expiresAt        DateTime?
+  tokenType        String?   @default("")
+  scope            String?   @default("")
+  idToken          String?   @default("")
+  sessionState     String?   @default("")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
   telegramId       String?
   telegramUsername String?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([providerId, accountId])
+  @@index([userId])
 }
 
 model Session {
@@ -113,8 +122,12 @@ model Session {
   userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
+  // Poller/cleanup queries filtering expired sessions
+  @@index([expiresAt])
 }
 
 model Verification {
@@ -124,100 +137,133 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
   @@unique([identifier, value])
+  @@index([expiresAt])
 }
 
+// ─── Wallet ───────────────────────────────────────────────────────────────────
+
 model Wallet {
-  id            String        @id @default(cuid())
-  userId        String        @unique
-  /// Non-negative enforced by DB CHECK constraint.
-  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
-  balance       Decimal       @default(0) @db.Decimal(10, 2)
-  /// Non-negative enforced by DB CHECK constraint.
-  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
-  totalSpent    Decimal       @default(0) @db.Decimal(10, 2)
-  /// Non-negative enforced by DB CHECK constraint.
-  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
-  totalOtp      Int           @default(0)
-  /// Non-negative enforced by DB CHECK constraint.
-  /// Applied via: prisma/migrations/..._add_wallet_check_constraints/migration.sql
-  totalRecharge Decimal       @default(0) @db.Decimal(10, 2)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions  Transaction[]
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  /// Non-negative. Enforced by DB CHECK constraint in migration.
+  balance       Decimal  @default(0) @db.Decimal(10, 2)
+  /// Non-negative. Enforced by DB CHECK constraint in migration.
+  totalSpent    Decimal  @default(0) @db.Decimal(10, 2)
+  /// Non-negative. Enforced by DB CHECK constraint in migration.
+  totalOtp      Int      @default(0)
+  /// Non-negative. Enforced by DB CHECK constraint in migration.
+  totalRecharge Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
 }
 
 model Transaction {
-  id            String            @id @default(cuid())
-  walletId      String
-  type          TransactionType
-  /// Amount is always positive (stored as absolute value).
-  /// Sign is determined by TransactionType: PURCHASE/REFUND/PROMO/REFERRAL/ADJUSTMENT
-  /// Non-negative enforced by DB CHECK — see add_wallet_check_constraints.sql
-  amount        Decimal           @db.Decimal(10, 2)
-  status        TransactionStatus @default(COMPLETED)
-  description   String?
-  /// Unique dedup key for deposits (UTR). Null for other transaction types.
-  txnId         String?           @unique
+  id     String @id @default(cuid())
+  walletId String
+
+  type   TransactionType
+  /// Amount is always positive — sign is implied by type.
+  /// Non-negative enforced by DB CHECK constraint in migration.
+  amount Decimal           @db.Decimal(10, 2)
+  status TransactionStatus @default(COMPLETED)
+
+  description String?
+  phoneNumber String?
+
+  /// Dedup key for deposits (UTR). Null for all other transaction types.
+  txnId         String? @unique
   /// Dedup key for refunds — stores the source orderId.
-  /// Unique constraint prevents duplicate refunds surviving a poller/cancel race.
-  refundOrderId String?           @unique
-  phoneNumber   String?
-  metadata      Json?
-  createdAt     DateTime          @default(now())
+  /// Unique constraint prevents duplicate REFUND surviving a poller/cancel race.
+  refundOrderId String? @unique
+
+  /// Denormalised orderId for efficient lookup without JSON path scan.
+  /// Replaces: metadata->>'orderId' queries (which cannot use a B-tree index).
+  /// Set on PURCHASE, REFUND, and PROMO transactions where an orderId exists.
+  /// FIX: previously orderId was only buried inside the metadata JSON column,
+  /// forcing a full table scan (metadata @> {path: ["orderId"], equals: X}).
+  orderId String?
+
+  /// Arbitrary extra data. Do NOT query with path operators — use top-level
+  /// columns (orderId, phoneNumber, txnId) for any field you need to filter on.
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  /// Transactions are append-only — no updatedAt by design.
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
-  @@index([walletId, createdAt])
+  // ── Pagination indexes ──────────────────────────────────────────────────────
+  // Compound (createdAt, id) supports stable cursor pagination:
+  //   WHERE (createdAt < $cursor.createdAt)
+  //      OR (createdAt = $cursor.createdAt AND id < $cursor.id)
+  // Pure createdAt is insufficient — two records can share the same timestamp,
+  // causing items to be silently skipped between pages.
+  @@index([walletId, createdAt(sort: Desc), id(sort: Desc)])
+
+  // ── Filter indexes ──────────────────────────────────────────────────────────
   @@index([walletId, status])
   @@index([walletId, type])
+  // Efficient lookup by orderId (PURCHASE/REFUND metadata update, status checks)
+  @@index([orderId])
 }
 
+// ─── OTP provider models ──────────────────────────────────────────────────────
+
 model ApiCredential {
-  id        String      @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
   apiUrl    String
-  /// SECURITY: apiKey stored in DB — rotate via admin panel, never commit to source.
-  apiKey    String      @unique
-  isActive  Boolean     @default(true)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  servers   OtpServer[]
+  /// SECURITY: rotate via admin panel — never commit to source control.
+  apiKey    String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  servers OtpServer[]
+
   @@index([isActive])
 }
 
 model OtpServer {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   countryCode String
-  countryIso  String    @default("IN")
-  countryName String    @default("India")
+  countryIso  String   @default("IN")
+  countryName String   @default("India")
   flagUrl     String?
   apiId       String
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  services    Service[]
-  numbers     ActiveNumber[]
-  api         ApiCredential @relation(fields: [apiId], references: [id])
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  services Service[]
+  numbers  ActiveNumber[]
+  api      ApiCredential @relation(fields: [apiId], references: [id])
+
   @@index([apiId])
   @@index([isActive])
 }
 
 model Service {
-  id           String        @id @default(cuid())
-  code         String
-  name         String
-  serverId     String
-  basePrice    Decimal       @db.Decimal(10, 2)
-  iconUrl      String        @default("https://i.ibb.co/kgBcLZsX/meow.png")
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id        String   @id @default(cuid())
+  code      String
+  name      String
+  serverId  String
+  basePrice Decimal  @db.Decimal(10, 2)
+  iconUrl   String   @default("https://i.ibb.co/kgBcLZsX/meow.png")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   server       OtpServer     @relation(fields: [serverId], references: [id])
   purchases    ActiveNumber[]
   customPrices CustomPrice[]
+
   @@unique([code, serverId])
   @@index([isActive])
   @@index([serverId])
@@ -225,58 +271,95 @@ model Service {
 }
 
 model ActiveNumber {
-  id              String       @id @default(cuid())
-  userId          String
-  serviceId       String
-  orderId         String       @unique
-  numberId        String
-  phoneNumber     String
-  serverId        String
-  /// Purchase price at time of buy. Non-negative (0.00 allowed for 100% discount).
-  /// Enforced by DB CHECK — see add_wallet_check_constraints.sql
-  price           Decimal      @db.Decimal(10, 2)
-  status          NumberStatus @default(PENDING)
-  activeStatus    ActiveStatus @default(ACTIVE)
-  smsContent      Json?
-  balanceDeducted Boolean      @default(false)
-  // FIX (Bug 6): removed redundant buyTime — use createdAt everywhere
-  createdAt       DateTime     @default(now())
-  expiresAt       DateTime
-  updatedAt       DateTime     @updatedAt
+  id          String @id @default(cuid())
+  userId      String
+  serviceId   String
+  serverId    String
+
+  /// Unique order reference — used as the join key across transactions and provider calls.
+  orderId String @unique
+
+  /// Provider-assigned order ID. Set to "PENDING" until provider call succeeds.
+  /// A record stuck as "PENDING" beyond PENDING_GHOST_TTL_MS is a ghost and will be refunded.
+  /// FIX(future): make nullable — null is cleaner than the "PENDING" sentinel string.
+  numberId String
+
+  /// E.164 phone number. "PENDING" until provider call succeeds (same as numberId).
+  /// FIX(future): make nullable.
+  phoneNumber String
+
+  /// Purchase price at time of buy.
+  /// Non-negative (0.00 allowed for 100% discount). Enforced by DB CHECK.
+  price Decimal @db.Decimal(10, 2)
+
+  status       NumberStatus @default(PENDING)
+  activeStatus ActiveStatus @default(ACTIVE)
+
+  /// JSON array of { content: string, receivedAt: string }.
+  /// Null until first SMS arrives.
+  smsContent Json?
+
+  /// True while balance has been deducted and no refund issued.
+  /// Acts as an atomic guard — updateMany WHERE balanceDeducted=true
+  /// ensures only one refund path can win.
+  balanceDeducted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
   user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   service Service   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   server  OtpServer @relation(fields: [serverId], references: [id])
-  @@index([userId, status])
-  @@index([status, expiresAt])
-  @@index([activeStatus])
-  @@index([userId, activeStatus, status])
-  @@index([serverId])
-  // FIX (Bug 4): composite index for orderId+userId used in cancel + stubs API
-  @@index([orderId, userId])
-  // PERF: poller fetches WHERE activeStatus=ACTIVE AND expiresAt >= cutoff
-  // This index makes that scan O(active_count) not O(total_history)
+
+  // ── Pagination indexes ──────────────────────────────────────────────────────
+  // Stable compound cursor for getReceivedInfinite / getCancelledInfinite:
+  //   ORDER BY createdAt DESC, id DESC
+  //   WHERE userId=X AND activeStatus=CLOSED AND status=Y
+  //     AND (createdAt < $cursor.createdAt
+  //          OR (createdAt = $cursor.createdAt AND id < $cursor.id))
+  @@index([userId, activeStatus, status, createdAt(sort: Desc), id(sort: Desc)])
+
+  // ── Poller index ────────────────────────────────────────────────────────────
+  // fetch.ts: WHERE activeStatus=ACTIVE AND status != CANCELLED AND expiresAt >= cutoff
+  // Makes the scan O(active_count) not O(total_history).
   @@index([activeStatus, expiresAt])
+
+  // ── Point-lookup indexes ────────────────────────────────────────────────────
+  // cancel endpoint and stubs API: WHERE orderId=X AND userId=Y
+  @@index([orderId, userId])
+  // Admin/legacy queries by userId alone
+  @@index([userId, status])
+  @@index([serverId])
 }
 
+// ─── Promotions ───────────────────────────────────────────────────────────────
+
 model Promocode {
-  id        String             @id @default(cuid())
-  code      String             @unique
-  amount    Decimal            @db.Decimal(10, 2)
-  maxUses   Int                @default(1)
-  usedCount Int                @default(0)
-  isActive  Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  history   PromocodeHistory[]
+  id        String   @id @default(cuid())
+  code      String   @unique
+  amount    Decimal  @db.Decimal(10, 2)
+  maxUses   Int      @default(1)
+  usedCount Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  history PromocodeHistory[]
+
+  @@index([isActive])
 }
 
 model PromocodeHistory {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   promocodeId String
   userId      String
-  amount      Decimal   @db.Decimal(10, 2)
-  createdAt   DateTime  @default(now())
-  promocode   Promocode @relation(fields: [promocodeId], references: [id])
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  promocode Promocode @relation(fields: [promocodeId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Unique constraint is the authoritative race-safe dedup guard for redeemPromo.
   @@unique([promocodeId, userId])
 }
 
@@ -286,30 +369,49 @@ model CustomPrice {
   serviceId String
   discount  Decimal      @db.Decimal(10, 2)
   type      DiscountType
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  service   Service      @relation(fields: [serviceId], references: [id])
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id])
+
   @@unique([userId, serviceId])
+  @@index([serviceId])
 }
 
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
 model Settings {
-  id                      String  @id @default("1")
-  bharatpeMerchantId      String?
-  bharatpeToken           String?
-  bharatpeQrImage         String?
-  minRechargeAmount       Decimal @default(10)   @db.Decimal(10, 2)
-  maxRechargeAmount       Decimal @default(5000) @db.Decimal(10, 2)
-  upiId                   String?
-  referralPercent         Float   @default(0)
-  minRedeem               Decimal @default(0) @db.Decimal(10, 2)
-  numberExpiryMinutes     Int     @default(20)
-  // FIX (Bug 7): store ₹ symbol directly — consistent with UI expectation
-  currency                String  @default("₹")
-  minCancelMinutes        Int     @default(2)
-  maintenanceMode         Boolean @default(false)
+  id String @id @default("1")
+
+  // Payment gateway
+  bharatpeMerchantId String?
+  bharatpeToken      String?
+  bharatpeQrImage    String?
+  upiId              String?
+
+  // Recharge limits
+  minRechargeAmount Decimal @default(10)   @db.Decimal(10, 2)
+  maxRechargeAmount Decimal @default(5000) @db.Decimal(10, 2)
+
+  // Display
+  /// Stored as the literal symbol (e.g. "₹", "$"). Not an ISO code.
+  currency String @default("₹")
+
+  // Business rules
+  referralPercent     Float   @default(0)
+  minRedeem           Decimal @default(0)  @db.Decimal(10, 2)
+  numberExpiryMinutes Int     @default(20)
+  minCancelMinutes    Int     @default(2)
+
+  // Feature flags
+  maintenanceMode Boolean @default(false)
+
+  // External links
   telegramHelpUrl         String?
   telegramSupportUsername String?
   apiDocsBaseUrl          String?
 }
+
+// ─── User API ─────────────────────────────────────────────────────────────────
 
 model UserApi {
   id              String    @id @default(cuid())
@@ -321,33 +423,39 @@ model UserApi {
   lastRefreshedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshLogs     UserApiRefreshLog[]
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshLogs UserApiRefreshLog[]
+
   @@index([apiKey])
-  @@index([userId])
 }
 
-// New table for api-key.ts refresh rate limiting (Bug 7+8 fix)
 model UserApiRefreshLog {
   id        String   @id @default(cuid())
   userId    String
   createdAt DateTime @default(now())
-  userApi   UserApi  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  userApi UserApi @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  // Rate-limit window query: WHERE userId=X AND createdAt >= windowStart
   @@index([userId, createdAt])
 }
 
+// ─── User data & audit ────────────────────────────────────────────────────────
+
 model UserData {
-  id          String    @id @default(cuid())
-  userId      String    @unique
-  /// Use UserStatus enum for compile-time safety — prevents typo bugs in status checks.
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  /// Always compare using UserStatus enum — never raw strings.
   status      UserStatus @default(ACTIVE)
   lastLogin   DateTime?
-  apiCalls    Int       @default(0)
+  apiCalls    Int        @default(0)
   lastApiCall DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@index([userId])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([status])
 }
 
@@ -359,9 +467,10 @@ model UserAuditLog {
   changes   Json?
   reason    String?
   createdAt DateTime @default(now())
+
   user  User @relation("AuditTarget",    fields: [userId],  references: [id])
   admin User @relation("AuditPerformer", fields: [adminId], references: [id])
-  @@index([userId])
-  @@index([adminId])
-  @@index([createdAt])
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([adminId, createdAt(sort: Desc)])
 }

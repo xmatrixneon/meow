@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { OtpProviderClient } from "@/lib/providers/client";
 import { nanoid } from "nanoid";
-import { Prisma, UserStatus } from "@/app/generated/prisma/client";
+import { Prisma, UserStatus, TransactionType, TransactionStatus } from "@/app/generated/prisma/client";
 import type { User } from "@/app/generated/prisma/client";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
 const { Decimal } = Prisma;
 
-// ─── Rate Limiting (30 req/s per user) ─────────────────────────────────────────
-// Using rate-limiter-flexible with in-memory store
-// For distributed production, swap RateLimiterMemory with RateLimiterRedis
+// ─── Rate Limiting (30 req/s per user) ───────────────────────────────────────
+// Using rate-limiter-flexible with in-memory store.
+// For distributed production, swap RateLimiterMemory with RateLimiterRedis.
 
 const rateLimiter = new RateLimiterMemory({
   points: 30, // 30 requests
@@ -23,9 +23,6 @@ const API_KEY_REGEX = /^[A-Za-z0-9_-]{32}$/;
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
-// SECURITY (M1): stubs API is GET-only and uses api_key query param (not headers).
-// Removing Authorization from CORS allowed headers reduces attack surface —
-// there is no legitimate reason for a browser to send Authorization here.
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -43,7 +40,6 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get("action");
   const apiKey = searchParams.get("api_key");
 
-  // SECURITY: Validate API key format before DB query
   if (!apiKey || !API_KEY_REGEX.test(apiKey)) {
     return new NextResponse("BAD_KEY", { status: 200, headers: corsHeaders });
   }
@@ -59,11 +55,9 @@ export async function GET(request: NextRequest) {
 
   const user = userApi.user;
 
-  // SECURITY: Enforce rate limit (30 req/s per user)
   try {
     await rateLimiter.consume(user.id);
   } catch (rejRes: unknown) {
-    // rejRes is RateLimiterRes when rate limited, Error when store error
     const msBeforeNext =
       rejRes instanceof Error ? 1000 : (rejRes as { msBeforeNext: number }).msBeforeNext;
     return new NextResponse("RATE_LIMIT_EXCEEDED", {
@@ -78,38 +72,23 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ─── Layer 2: UserData auto-repair ────────────────────────────────────────
-  //
-  // WHY UPSERT HERE:
-  // `databaseHooks.user.create.after` in auth.ts creates UserData on signup,
-  // but the hook runs inside better-auth's transaction and can silently fail
-  // due to FK visibility timing (the User row isn't committed yet when the
-  // hook fires). This upsert is the guaranteed safety net — it auto-creates
-  // any missing row so a new user is NEVER falsely returned ACCOUNT_BLOCKED.
-  //
-  // This is idempotent — existing rows are untouched (update: {}).
-  // For blocked/suspended users the existing status is preserved correctly.
+  // ─── UserData auto-repair ──────────────────────────────────────────────────
   const userData = await prisma.userData.upsert({
     where: { userId: user.id },
     create: {
       userId: user.id,
-      // Use enum constant — compile-time safety + matches schema UserStatus enum
       status: UserStatus.ACTIVE,
       lastLogin: new Date(),
       lastApiCall: new Date(),
       apiCalls: 1,
     },
-    update: {}, // preserve existing status — don't un-block a blocked user
+    update: {},
   });
 
-  // Compare against enum value — UserData.status is a UserStatus enum in schema
   if (userData.status !== UserStatus.ACTIVE) {
     return new NextResponse("ACCOUNT_BLOCKED", { status: 200, headers: corsHeaders });
   }
 
-  // SECURITY (C4): maintenance mode — block all API operations except getBalance
-  // so admin can halt number purchases/cancellations during maintenance without
-  // taking down the service entirely.
   if (action !== "getBalance" && action !== "getStatus") {
     const settings = await prisma.settings.findUnique({
       where: { id: "1" },
@@ -120,7 +99,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Update API call stats (fire-and-forget — not on critical path)
   prisma.userData
     .update({
       where: { userId: user.id },
@@ -141,7 +119,6 @@ export async function GET(request: NextRequest) {
 }
 
 // ─── getBalance ───────────────────────────────────────────────────────────────
-// Returns: ACCESS_BALANCE:{amount}
 
 async function handleGetBalance(user: User) {
   const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
@@ -150,8 +127,6 @@ async function handleGetBalance(user: User) {
     return new NextResponse("ACCESS_BALANCE:0.00", { status: 200, headers: corsHeaders });
   }
 
-  // Use toDecimalPlaces instead of Number() to avoid precision loss
-  // on large balances (Number() loses precision above ~15 significant digits)
   return new NextResponse(
     `ACCESS_BALANCE:${wallet.balance.toDecimalPlaces(2).toString()}`,
     { status: 200, headers: corsHeaders },
@@ -159,7 +134,6 @@ async function handleGetBalance(user: User) {
 }
 
 // ─── getCountries ─────────────────────────────────────────────────────────────
-// Returns: JSON { countryCode: countryName, ... }
 
 async function handleGetCountries() {
   const servers = await prisma.otpServer.findMany({
@@ -177,8 +151,6 @@ async function handleGetCountries() {
 }
 
 // ─── getServices ──────────────────────────────────────────────────────────────
-// Params: country (countryCode)
-// Returns: JSON { "serviceCode_countryCode": serviceName, ... }
 
 async function handleGetServices(searchParams: URLSearchParams) {
   const country = searchParams.get("country");
@@ -192,9 +164,7 @@ async function handleGetServices(searchParams: URLSearchParams) {
       isActive: true,
       server: { countryCode: country, isActive: true },
     },
-    include: {
-      server: { select: { countryCode: true } },
-    },
+    include: { server: { select: { countryCode: true } } },
     orderBy: { name: "asc" },
   });
 
@@ -236,19 +206,25 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
   }
 
-  // Calculate price with custom discount if applicable
+  // FIX: clamp finalPrice to zero — a discount larger than basePrice must
+  // never produce a negative value. A negative price passes the
+  // `balance.lessThan(finalPrice)` check and causes `decrement(negative)`
+  // to INCREMENT the wallet instead, giving the user free balance.
   let finalPrice = service.basePrice;
   const customPrice = await prisma.customPrice.findUnique({
     where: { userId_serviceId: { userId: user.id, serviceId: service.id } },
   });
 
   if (customPrice) {
+    let computed: Prisma.Decimal;
     if (customPrice.type === "FLAT") {
-      finalPrice = service.basePrice.minus(customPrice.discount);
+      computed = service.basePrice.minus(customPrice.discount);
     } else {
+      // PERCENT: guard against discount > 100 as well
       const discountAmount = service.basePrice.mul(customPrice.discount.div(100));
-      finalPrice = service.basePrice.minus(discountAmount);
+      computed = service.basePrice.minus(discountAmount);
     }
+    finalPrice = computed.isNegative() ? new Decimal(0) : computed;
   }
 
   const orderId = nanoid(16);
@@ -273,15 +249,15 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
         },
       });
 
-      // Extra safety net — should never happen due to the check above
       if (updatedWallet.balance.isNegative()) throw new Error("NO_BALANCE");
 
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
-          type: "PURCHASE",
+          type: TransactionType.PURCHASE,
           amount: finalPrice,
-          status: "COMPLETED",
+          status: TransactionStatus.COMPLETED,
+          orderId,
           description: `Purchase pending: ${service.name}`,
           metadata: { orderId, serviceId: service.id, serviceName: service.name },
         },
@@ -330,7 +306,6 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
 
   if (!result.success || !result.phoneNumber || !result.orderId) {
     await handleProviderFailure(orderId, finalPrice, user.id);
-    // Check raw error code from provider (not parsed message)
     const errorCode = result.errorCode;
     if (errorCode === "NO_NUMBER" || errorCode === "NO_NUMBERS") {
       return new NextResponse("NO_API_NUMBER", { status: 200, headers: corsHeaders });
@@ -346,9 +321,10 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     });
 
     await prisma.transaction.updateMany({
-      where: { metadata: { path: ["orderId"], equals: orderId } },
+      where: { orderId },
       data: {
         description: `Purchased ${service.name} number: ${result.phoneNumber}`,
+        phoneNumber: result.phoneNumber,
         metadata: {
           orderId,
           numberId: result.orderId,
@@ -370,8 +346,22 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
 }
 
 /**
- * Refund and delete a failed purchase record.
- * Sets refundOrderId for DB-level dedup (unique constraint prevents double refunds).
+ * Refund and DELETE a failed purchase record.
+ *
+ * FIX (consistency): now matches number.router.ts handleBuyFailure — deletes
+ * the activeNumber and the PURCHASE transaction instead of creating a REFUND
+ * transaction. This ensures both API paths produce identical history for users:
+ * a failed buy leaves no trace in transaction history (clean slate).
+ *
+ * Previously this function kept the PURCHASE and added a REFUND, while
+ * number.router.ts deleted both — inconsistent history depending on which
+ * code path was taken.
+ *
+ * FIX (wallet null): wallet is fetched first and throws if missing so the
+ * transaction rolls back and balanceDeducted stays true. The ghost poller
+ * will pick it up and retry. Previously a missing wallet silently skipped the
+ * REFUND transaction while still deleting the activeNumber, resulting in
+ * permanently lost balance with no log entry.
  */
 async function handleProviderFailure(
   orderId: string,
@@ -381,6 +371,11 @@ async function handleProviderFailure(
   try {
     await prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
+      if (!wallet) {
+        throw new Error(
+          `[stubs/getNumber] Wallet not found for userId=${userId}, orderId=${orderId}`,
+        );
+      }
 
       const activeNumber = await tx.activeNumber.findFirst({
         where: { orderId, userId, balanceDeducted: true },
@@ -388,6 +383,12 @@ async function handleProviderFailure(
       if (!activeNumber) return;
 
       await tx.activeNumber.delete({ where: { id: activeNumber.id } });
+
+      // Delete the PURCHASE transaction — consistent with tRPC handleBuyFailure.
+      // Failed buys leave no transaction history on either API path.
+      await tx.transaction.deleteMany({
+        where: { orderId, type: TransactionType.PURCHASE },
+      });
 
       await tx.wallet.update({
         where: { userId },
@@ -397,20 +398,6 @@ async function handleProviderFailure(
           totalOtp: { decrement: 1 },
         },
       });
-
-      if (wallet) {
-        await tx.transaction.create({
-          data: {
-            walletId: wallet.id,
-            type: "REFUND",
-            amount: price,
-            status: "COMPLETED",
-            refundOrderId: orderId,
-            description: "No number available from provider",
-            metadata: { orderId, reason: "provider_no_number" },
-          },
-        });
-      }
     });
   } catch (error) {
     console.error("[getNumber] Failed to refund after provider error:", error);
@@ -434,7 +421,6 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("NO_ACTIVATION", { status: 200, headers: corsHeaders });
   }
 
-  // Already closed by poller
   if (number.activeStatus === "CLOSED") {
     if (number.smsContent) {
       return new NextResponse(`STATUS_OK:${extractLatestSms(number.smsContent)}`, {
@@ -445,52 +431,51 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
   }
 
-  // Expiry safety net (fetch.ts is the primary handler)
   if (number.activeStatus === "ACTIVE" && new Date() > number.expiresAt) {
     if (number.balanceDeducted && number.status === "PENDING") {
-      await prisma.$transaction(async (tx) => {
-        const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
+      try {
+        await prisma.$transaction(async (tx) => {
+          const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
+          if (!wallet) {
+            throw new Error(
+              `[stubs/getStatus] Wallet not found for userId=${user.id}, orderId=${number.orderId}`,
+            );
+          }
 
-        // Atomic guard — prevents double-refund race with the poller
-        const updated = await tx.activeNumber.updateMany({
-          where: { id: number.id, balanceDeducted: true },
-          data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
+          const updated = await tx.activeNumber.updateMany({
+            where: { id: number.id, balanceDeducted: true },
+            data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
+          });
+
+          if (updated.count === 0) return;
+
+          await tx.wallet.update({
+            where: { userId: user.id },
+            data: {
+              balance: { increment: number.price },
+              totalSpent: { decrement: number.price },
+              totalOtp: { decrement: 1 },
+            },
+          });
+
+          await tx.transaction.create({
+            data: {
+              walletId: wallet.id,
+              type: TransactionType.REFUND,
+              amount: number.price,
+              status: TransactionStatus.COMPLETED,
+              refundOrderId: number.orderId,
+              orderId: number.orderId,
+              phoneNumber: number.phoneNumber,
+              description: "Auto-refund: Number expired without SMS",
+              metadata: { orderId: number.orderId, reason: "expired", serviceId: number.serviceId },
+            },
+          });
         });
-
-        if (updated.count === 0) return; // Already refunded by poller
-
-        if (!wallet) {
-          // Close the number regardless so it doesn't get re-processed.
-          // Balance loss is logged for manual recovery.
-          console.error(
-            `[stubs/getStatus] Wallet not found for userId=${user.id}, orderId=${number.orderId} — number closed but balance NOT refunded`,
-          );
-          return;
-        }
-
-        await tx.wallet.update({
-          where: { userId: user.id },
-          data: {
-            balance: { increment: number.price },
-            totalSpent: { decrement: number.price },
-            totalOtp: { decrement: 1 },
-          },
-        });
-
-        await tx.transaction.create({
-          data: {
-            walletId: wallet.id,
-            type: "REFUND",
-            amount: number.price,
-            status: "COMPLETED",
-            refundOrderId: number.orderId,
-            description: "Auto-refund: Number expired without SMS",
-            metadata: { orderId: number.orderId, reason: "expired", serviceId: number.serviceId },
-          },
-        });
-      });
+      } catch (err) {
+        console.error(`[stubs/getStatus] Refund transaction failed:`, err);
+      }
     } else {
-      // Has SMS or already refunded — just close
       await prisma.activeNumber.update({
         where: { id: number.id },
         data: { activeStatus: "CLOSED" },
@@ -589,15 +574,13 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       return { success: false };
     });
 
-    // updateMany with balanceDeducted=true guard INSIDE the transaction.
-    // Prevents double-refund race with the poller's handleAutoRefund.
     await prisma.$transaction(async (tx) => {
       const guard = await tx.activeNumber.updateMany({
         where: { id: number.id, balanceDeducted: true },
         data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
       });
 
-      if (guard.count === 0) return; // Poller already refunded
+      if (guard.count === 0) return;
 
       await tx.wallet.update({
         where: { userId: user.id },
@@ -611,10 +594,12 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
-          type: "REFUND",
+          type: TransactionType.REFUND,
           amount: number.price,
-          status: "COMPLETED",
+          status: TransactionStatus.COMPLETED,
           refundOrderId: number.orderId,
+          orderId: number.orderId,
+          phoneNumber: number.phoneNumber,
           description: `Cancelled: ${number.service.name} - ${number.phoneNumber}`,
           metadata: {
             orderId: number.orderId,
@@ -647,12 +632,9 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       const nextResult = await client.getNextSms(number.numberId);
 
       if (nextResult.success && nextResult.hasMore) {
-        // Keep status=COMPLETED (not PENDING) so the poller's multi-SMS branch
-        // correctly handles it (checks smsContent && status===COMPLETED).
-        // Resetting to PENDING would cause the poller to re-deliver the old SMS.
         await prisma.activeNumber.update({
           where: { id: number.id },
-          data: { status: "COMPLETED", activeStatus: "ACTIVE" },
+          data: { activeStatus: "ACTIVE" },
         });
         return new NextResponse("ACCESS_RETRY_GET", { status: 200, headers: corsHeaders });
       }

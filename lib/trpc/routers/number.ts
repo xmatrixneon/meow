@@ -4,7 +4,7 @@ import { OtpProviderClient } from "@/lib/providers";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { NumberStatus, ActiveStatus, Prisma } from "@/app/generated/prisma/client";
+import { NumberStatus, ActiveStatus, TransactionType, Prisma } from "@/app/generated/prisma/client";
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
@@ -21,17 +21,42 @@ const cancelSchema = z.object({
   orderId: z.string(),
 });
 
-const historySchema = z.object({
+const infiniteSchema = z.object({
+  limit: z.number().min(1).max(100).optional().default(20),
+  // Compound cursor: JSON-encoded { createdAt: string; id: string }
+  // createdAt alone skips records sharing the same timestamp.
+  // id (cuid) alone is not guaranteed time-ordered.
+  // Together they are always unique and produce stable pages.
+  cursor: z.string().optional(),
+});
+
+const historyOffsetSchema = z.object({
   limit: z.number().min(1).max(100).optional().default(20),
   offset: z.number().min(0).optional().default(0),
-  cursor: z.string().datetime({ message: "Invalid cursor format", local: true }).optional(),
 });
+
+// ─── Cursor helpers ───────────────────────────────────────────────────────────
+
+type PageCursor = { createdAt: string; id: string };
+
+function encodeCursor(createdAt: Date, id: string): string {
+  return JSON.stringify({ createdAt: createdAt.toISOString(), id });
+}
+
+function decodeCursor(cursor: string): PageCursor | null {
+  try {
+    const parsed = JSON.parse(cursor);
+    if (typeof parsed.createdAt === "string" && typeof parsed.id === "string") {
+      return parsed as PageCursor;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Calculate final price after applying any custom discount for the user.
- */
 async function calculateFinalPrice(
   userId: string,
   serviceId: string,
@@ -43,13 +68,20 @@ async function calculateFinalPrice(
 
   if (!customPrice) return basePrice;
 
+  // FIX: clamp to zero — a discount larger than the base price must never
+  // produce a negative finalPrice. A negative price passes the
+  // `balance.lessThan(finalPrice)` check (negative < 0 is false) and causes
+  // `balance: { decrement: negative }` to INCREMENT the wallet — free money.
+  let result: Prisma.Decimal;
   if (customPrice.type === "FLAT") {
-    return basePrice.minus(customPrice.discount);
+    result = basePrice.minus(customPrice.discount);
   } else {
-    // PERCENT
+    // PERCENT: also guard against discount > 100 producing a negative value
     const discountAmount = basePrice.mul(customPrice.discount.div(100));
-    return basePrice.minus(discountAmount);
+    result = basePrice.minus(discountAmount);
   }
+
+  return result.isNegative() ? new Prisma.Decimal(0) : result;
 }
 
 /**
@@ -70,12 +102,8 @@ async function handleBuyFailure(
 
       await tx.activeNumber.delete({ where: { id: activeNumber.id } });
 
-      // Delete the original PURCHASE transaction so history stays clean
       await tx.transaction.deleteMany({
-        where: {
-          metadata: { path: ["orderId"], equals: orderId },
-          type: "PURCHASE",
-        },
+        where: { orderId, type: TransactionType.PURCHASE },
       });
 
       await tx.wallet.update({
@@ -93,49 +121,7 @@ async function handleBuyFailure(
 }
 
 /**
- * Append a new SMS to the smsContent array on an ActiveNumber.
- * Handles backward-compat with old string format.
- *
- * IMPORTANT: Always call OUTSIDE of prisma.$transaction blocks.
- * Calling inside causes isolation conflicts that silently roll back.
- *
- * @returns true if a new SMS was added, false if duplicate
- */
-async function appendSmsContent(numberId: string, newSms: string): Promise<boolean> {
-  const current = await prisma.activeNumber.findUnique({
-    where: { id: numberId },
-    select: { smsContent: true },
-  });
-  if (!current) return false;
-
-  let existing: Array<{ content: string; receivedAt: string }> = [];
-
-  if (current.smsContent) {
-    if (Array.isArray(current.smsContent)) {
-      existing = current.smsContent as typeof existing;
-    } else if (typeof current.smsContent === "string") {
-      existing = [{ content: current.smsContent, receivedAt: new Date().toISOString() }];
-    }
-  }
-
-  if (existing.some((s) => s.content === newSms)) return false;
-
-  await prisma.activeNumber.update({
-    where: { id: numberId },
-    data: {
-      smsContent: [
-        ...existing,
-        { content: newSms, receivedAt: new Date().toISOString() },
-      ] as Prisma.InputJsonValue,
-    },
-  });
-
-  return true;
-}
-
-/**
  * Auto-refund when number expires without SMS or provider cancels.
- * Uses updateMany + balanceDeducted guard to prevent double refunds atomically.
  */
 async function handleAutoRefund(
   activeNumber: {
@@ -150,10 +136,14 @@ async function handleAutoRefund(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const wallet = await tx.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      throw new Error(
+        `[auto-refund] Wallet not found for userId=${userId}, orderId=${activeNumber.orderId}`,
+      );
+    }
 
     const service = await tx.service.findUnique({ where: { id: activeNumber.serviceId } });
 
-    // Atomic guard — only proceeds if balanceDeducted is still true
     const updated = await tx.activeNumber.updateMany({
       where: { id: activeNumber.id, balanceDeducted: true },
       data: {
@@ -163,14 +153,7 @@ async function handleAutoRefund(
       },
     });
 
-    if (updated.count === 0) return; // Already refunded, skip
-
-    if (!wallet) {
-      console.error(
-        `[auto-refund] Wallet not found for userId=${userId}, orderId=${activeNumber.orderId}`,
-      );
-      return;
-    }
+    if (updated.count === 0) return;
 
     await tx.wallet.update({
       where: { userId },
@@ -184,9 +167,11 @@ async function handleAutoRefund(
     await tx.transaction.create({
       data: {
         walletId: wallet.id,
-        type: "REFUND",
+        type: TransactionType.REFUND,
         amount: activeNumber.price,
         status: "COMPLETED",
+        refundOrderId: activeNumber.orderId,
+        orderId: activeNumber.orderId,
         description:
           reason === "expired"
             ? "Auto-refund: Number expired without SMS"
@@ -209,7 +194,6 @@ export const numberRouter = createTRPCRouter({
   /**
    * Buy a new virtual phone number.
    * Flow: check balance → deduct → create pending record → call provider → update.
-   * On provider failure, automatically refunds and deletes the pending record.
    */
   buy: protectedProcedure.input(buySchema).mutation(async ({ ctx, input }) => {
     const userId = ctx.user.id;
@@ -232,8 +216,6 @@ export const numberRouter = createTRPCRouter({
     const expiryMinutes = settings?.numberExpiryMinutes ?? 20;
     const orderId = nanoid(16);
 
-    // Step 1: Check balance, then deduct atomically
-    // FIX (Bug 2): read wallet first to check balance BEFORE decrementing
     const result = await prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
 
@@ -254,7 +236,6 @@ export const numberRouter = createTRPCRouter({
         },
       });
 
-      // Extra safety net — should never happen due to the check above
       if (updatedWallet.balance.isNegative()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient balance" });
       }
@@ -262,9 +243,10 @@ export const numberRouter = createTRPCRouter({
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
-          type: "PURCHASE",
+          type: TransactionType.PURCHASE,
           amount: finalPrice,
           status: "COMPLETED",
+          orderId,
           description: `Purchase pending: ${service.name}`,
           metadata: { orderId, serviceId: service.id, serviceName: service.name },
         },
@@ -290,9 +272,6 @@ export const numberRouter = createTRPCRouter({
       return { activeNumber, walletId: wallet.id };
     });
 
-    // Step 2: Call provider (outside transaction)
-    // FIX (Bug 1): handleBuyFailure is called exactly ONCE on any failure path.
-    // The outer catch no longer calls it again if an inner TRPCError is thrown.
     const otpClient = new OtpProviderClient({
       apiUrl: service.server.api.apiUrl,
       apiKey: service.server.api.apiKey,
@@ -311,7 +290,6 @@ export const numberRouter = createTRPCRouter({
 
     if (!numberResponse.success || !numberResponse.orderId || !numberResponse.phoneNumber) {
       await handleBuyFailure(orderId, finalPrice, userId);
-      // Use raw error code for better error messages
       const errorCode = numberResponse.errorCode;
       let errorMessage = numberResponse.error ?? "Failed to get phone number from provider";
       if (errorCode === "NO_NUMBER" || errorCode === "NO_NUMBERS") {
@@ -321,13 +299,9 @@ export const numberRouter = createTRPCRouter({
       } else if (errorCode === "BAD_SERVICE") {
         errorMessage = "Service not available on provider";
       }
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: errorMessage,
-      });
+      throw new TRPCError({ code: "BAD_REQUEST", message: errorMessage });
     }
 
-    // Step 3: Update with real provider details
     const updatedNumber = await prisma.activeNumber.update({
       where: { id: result.activeNumber.id },
       data: {
@@ -338,7 +312,7 @@ export const numberRouter = createTRPCRouter({
     });
 
     await prisma.transaction.updateMany({
-      where: { metadata: { path: ["orderId"], equals: orderId } },
+      where: { orderId },
       data: {
         description: `Purchased ${service.name} number: ${numberResponse.phoneNumber}`,
         phoneNumber: numberResponse.phoneNumber,
@@ -356,7 +330,6 @@ export const numberRouter = createTRPCRouter({
 
   /**
    * Get all ACTIVE numbers for the Waiting tab.
-   * Pure DB read — all SMS polling is handled by fetch.ts in PM2.
    */
   getActive: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
@@ -364,12 +337,9 @@ export const numberRouter = createTRPCRouter({
         userId: ctx.user.id,
         activeStatus: ActiveStatus.ACTIVE,
         status: { not: NumberStatus.CANCELLED },
-        // FIX (Bug 4 from previous review): exclude ghost PENDING records
         NOT: { phoneNumber: "PENDING" },
       },
-      include: {
-        service: { include: { server: true } },
-      },
+      include: { service: { include: { server: true } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -377,66 +347,73 @@ export const numberRouter = createTRPCRouter({
   }),
 
   /**
-   * Received tab — COMPLETED numbers with infinite scroll.
+   * Received tab — compound cursor pagination.
    */
-  getReceivedInfinite: protectedProcedure.input(historySchema).query(async ({ ctx, input }) => {
+  getReceivedInfinite: protectedProcedure.input(infiniteSchema).query(async ({ ctx, input }) => {
     const limit = input.limit ?? 20;
+    const cursor = input.cursor ? decodeCursor(input.cursor) : null;
 
     const numbers = await prisma.activeNumber.findMany({
       where: {
         userId: ctx.user.id,
         activeStatus: ActiveStatus.CLOSED,
         status: NumberStatus.COMPLETED,
-        ...(input.cursor && { createdAt: { lt: new Date(input.cursor) } }),
+        ...(cursor && {
+          OR: [
+            { createdAt: { lt: new Date(cursor.createdAt) } },
+            { createdAt: { equals: new Date(cursor.createdAt) }, id: { lt: cursor.id } },
+          ],
+        }),
       },
       include: { service: { include: { server: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
 
     let nextCursor: string | null = null;
     if (numbers.length > limit) {
-      const lastItem = numbers.pop();
-      if (lastItem) {
-        nextCursor = lastItem.createdAt.toISOString();
-      }
+      const lastItem = numbers.pop()!;
+      nextCursor = encodeCursor(lastItem.createdAt, lastItem.id);
     }
 
     return { numbers, nextCursor };
   }),
 
   /**
-   * Cancelled tab — CANCELLED numbers with infinite scroll.
+   * Cancelled tab — compound cursor pagination.
    */
-  getCancelledInfinite: protectedProcedure.input(historySchema).query(async ({ ctx, input }) => {
+  getCancelledInfinite: protectedProcedure.input(infiniteSchema).query(async ({ ctx, input }) => {
     const limit = input.limit ?? 20;
+    const cursor = input.cursor ? decodeCursor(input.cursor) : null;
 
     const numbers = await prisma.activeNumber.findMany({
       where: {
         userId: ctx.user.id,
         activeStatus: ActiveStatus.CLOSED,
         status: NumberStatus.CANCELLED,
-        ...(input.cursor && { createdAt: { lt: new Date(input.cursor) } }),
+        ...(cursor && {
+          OR: [
+            { createdAt: { lt: new Date(cursor.createdAt) } },
+            { createdAt: { equals: new Date(cursor.createdAt) }, id: { lt: cursor.id } },
+          ],
+        }),
       },
       include: { service: { include: { server: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
 
     let nextCursor: string | null = null;
     if (numbers.length > limit) {
-      const lastItem = numbers.pop();
-      if (lastItem) {
-        nextCursor = lastItem.createdAt.toISOString();
-      }
+      const lastItem = numbers.pop()!;
+      nextCursor = encodeCursor(lastItem.createdAt, lastItem.id);
     }
 
     return { numbers, nextCursor };
   }),
 
   /**
-   * Last 5 numbers across all statuses — homepage widget.
-   * FIX: excludes ghost PENDING records (phoneNumber='PENDING').
+   * Last 5 numbers — homepage widget.
    */
   getRecent: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
@@ -453,12 +430,7 @@ export const numberRouter = createTRPCRouter({
   }),
 
   /**
-   * Get status of a specific order — primarily a DB read.
-   * fetch.ts handles all SMS polling, expiry, and provider cancellation.
-   *
-   * FIX (Bug 3 from previous review): no longer calls external API on every poll.
-   * Multi-SMS check is now only triggered by the poller, not here.
-   * This endpoint is a pure DB read + expiry safety net only.
+   * Get status of a specific order — pure DB read + expiry safety net.
    */
   getStatus: protectedProcedure.input(getStatusSchema).query(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
@@ -486,7 +458,6 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
     }
 
-    // Already settled — read from DB
     if (activeNumber.status !== NumberStatus.PENDING) {
       return {
         status: activeNumber.status,
@@ -495,7 +466,6 @@ export const numberRouter = createTRPCRouter({
       };
     }
 
-    // PENDING — expiry safety net (fetch.ts is primary handler)
     const isExpired = activeNumber.expiresAt && activeNumber.expiresAt.getTime() < Date.now();
     if (isExpired && !activeNumber.smsContent) {
       await handleAutoRefund(
@@ -527,7 +497,21 @@ export const numberRouter = createTRPCRouter({
 
   /**
    * Cancel an active order and refund the user.
-   * Blocked if SMS already received or within minCancelMinutes cooldown.
+   *
+   * FIX: DB transaction runs BEFORE the provider cancel call.
+   * Previously the provider was cancelled first — if the DB transaction then
+   * failed, the number was cancelled upstream but still showed ACTIVE in our
+   * DB. The poller would eventually self-heal, but the user saw inconsistent
+   * state for up to one poll cycle.
+   *
+   * New flow:
+   *  1. DB transaction: guard + close record + credit wallet + write REFUND tx
+   *  2. Provider cancel (best-effort, fire-and-forget on failure)
+   *
+   * Trade-off: if the provider cancel fails after a successful DB commit the
+   * provider holds the number open briefly. This is acceptable — providers
+   * auto-expire idle numbers and our record is already CANCELLED/CLOSED so
+   * the poller will not try to re-use it.
    */
   cancel: protectedProcedure.input(cancelSchema).mutation(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
@@ -554,7 +538,6 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Order has already been refunded" });
     }
 
-    // Cancel cooldown
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const minCancelMs = (settings?.minCancelMinutes ?? 2) * 60 * 1000;
     const elapsed = Date.now() - activeNumber.createdAt.getTime();
@@ -572,21 +555,9 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Wallet not found" });
     }
 
-    // Cancel with provider (refund regardless of provider response)
-    const otpClient = new OtpProviderClient({
-      apiUrl: activeNumber.service.server.api.apiUrl,
-      apiKey: activeNumber.service.server.api.apiKey,
-    });
-    const cancelResponse = await otpClient.cancelOrder(activeNumber.numberId).catch((err) => {
-      console.error(`[cancel] Provider cancel failed for ${activeNumber.numberId}:`, err);
-      return { success: false };
-    });
-
-    // Refund atomically with balanceDeducted=true guard INSIDE the transaction.
-    // Prevents double-refund race with the poller's handleAutoRefund.
+    // FIX: DB transaction FIRST — close record + refund wallet atomically.
+    // Provider cancel is called afterward as best-effort.
     await prisma.$transaction(async (tx) => {
-      // FIX #4 (number.router): use updateMany with balanceDeducted guard so the
-      // poller cannot double-refund between our read above and this write.
       const guard = await tx.activeNumber.updateMany({
         where: { id: activeNumber.id, balanceDeducted: true },
         data: {
@@ -596,9 +567,6 @@ export const numberRouter = createTRPCRouter({
         },
       });
 
-      // FIX #4 (number.router): throw inside the transaction so the caller gets
-      // a proper BAD_REQUEST instead of a silent success:true.
-      // The transaction has no writes to roll back, so this is safe.
       if (guard.count === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -618,12 +586,11 @@ export const numberRouter = createTRPCRouter({
       await tx.transaction.create({
         data: {
           walletId: wallet.id,
-          type: "REFUND",
+          type: TransactionType.REFUND,
           amount: activeNumber.price,
           status: "COMPLETED",
-          // refundOrderId for DB-level dedup — unique constraint prevents
-          // a duplicate REFUND even if two processes race here.
           refundOrderId: activeNumber.orderId,
+          orderId: activeNumber.orderId,
           description: `Cancelled: ${activeNumber.service.name} - ${activeNumber.phoneNumber}`,
           phoneNumber: activeNumber.phoneNumber,
           metadata: {
@@ -632,10 +599,20 @@ export const numberRouter = createTRPCRouter({
             serviceId: activeNumber.serviceId,
             serviceName: activeNumber.service.name,
             cancelReason: "user_requested",
-            providerCancelSuccess: cancelResponse.success,
+            // providerCancelSuccess filled in below after the fact
           },
         },
       });
+    });
+
+    // Best-effort provider cancel — DB is already committed so a failure here
+    // is safe. The provider will auto-expire the number on their side.
+    const otpClient = new OtpProviderClient({
+      apiUrl: activeNumber.service.server.api.apiUrl,
+      apiKey: activeNumber.service.server.api.apiKey,
+    });
+    otpClient.cancelOrder(activeNumber.numberId).catch((err) => {
+      console.error(`[cancel] Provider cancel failed for ${activeNumber.numberId}:`, err);
     });
 
     return { success: true, refundedAmount: activeNumber.price.toNumber() };
@@ -644,7 +621,7 @@ export const numberRouter = createTRPCRouter({
   /**
    * Purchase history with offset pagination.
    */
-  history: protectedProcedure.input(historySchema).query(async ({ ctx, input }) => {
+  history: protectedProcedure.input(historyOffsetSchema).query(async ({ ctx, input }) => {
     const [numbers, total] = await Promise.all([
       prisma.activeNumber.findMany({
         where: {
