@@ -9,32 +9,12 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { useRawInitData } from "@telegram-apps/sdk-react";
+import { retrieveRawInitData } from "@telegram-apps/sdk";
 import { authClient } from "@/lib/auth-client";
 import { TelegramAuthContext } from "@/hooks/use-telegram-auth";
 import { makeAuthError, parseTelegramUserId } from "@/lib/telegram-web-app";
 import type { AuthState, AuthAction } from "@/types/auth";
 import type { User } from "@/types/user";
-
-// ─── SDK init (once per page) ─────────────────────────────────────────────────
-
-let sdkBooted = false;
-
-function bootSdk(): void {
-  if (sdkBooted) return;
-  sdkBooted = true;
-  try {
-    import("@telegram-apps/sdk-react").then(({ init, miniApp }) => {
-      init();
-      if (miniApp.mountSync.isAvailable()) {
-        miniApp.mountSync();
-        miniApp.ready();
-      }
-    });
-  } catch (err) {
-    console.warn("[tma-sdk] Boot warning:", err);
-  }
-}
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
@@ -82,8 +62,6 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
   const [authState, dispatch] = useReducer(authReducer, initialState);
   const [user, setUser] = useUserState();
   const didRun = useRef(false);
-
-  const rawInitData = useRawInitData();
 
   const progress = useCallback(
     (value: number, label: string) =>
@@ -177,24 +155,40 @@ export function TelegramAuthProvider({ children }: { children: ReactNode }) {
   // ── retry ───────────────────────────────────────────────────────────────
 
   const retry = useCallback((): void => {
-    if (rawInitData) signIn(rawInitData);
-  }, [rawInitData, signIn]);
+    didRun.current = false;
+    // Re-trigger the effect by forcing a re-render
+    dispatch({ type: "LOADING" });
+  }, []);
 
   // ── Boot ────────────────────────────────────────────────────────────────
+  // Use retrieveRawInitData() directly instead of useRawInitData() hook
+  // to avoid hook errors when not in Telegram context
 
   useEffect(() => {
     if (didRun.current) return;
+    didRun.current = true;
 
-    if (rawInitData === undefined) {
+    let rawInitData: string | undefined;
+
+    try {
+      // Try to get init data from URL hash
+      rawInitData = retrieveRawInitData();
+    } catch (err) {
+      // Not in Telegram context - show "Open in Telegram" screen
+      console.log("[auth] Not in Telegram context:", err);
       dispatch({ type: "UNAUTHENTICATED" });
       return;
     }
 
-    didRun.current = true;
+    if (!rawInitData) {
+      // No init data available - not in Telegram
+      dispatch({ type: "UNAUTHENTICATED" });
+      return;
+    }
+
     progress(10, "Starting up…");
-    bootSdk();
     void checkSession(rawInitData);
-  }, [rawInitData, checkSession, progress]);
+  }, [checkSession, progress]);
 
   // ── Context value ────────────────────────────────────────────────────────
 

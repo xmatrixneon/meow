@@ -106,7 +106,10 @@
       "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getNumber&service=whatsapp&country=22\" 2>&1)",
       "Bash(curl -s \"https://cattysms.shop/stubs/handler_api.php?api_key=maya&action=getNumber&service=telegram&country=22\" 2>&1)",
       "Bash(npx tsc --noEmit 2>&1 | head -30)",
-      "Bash(npx tsc --noEmit 2>&1 | head -20)"
+      "Bash(npx tsc --noEmit 2>&1 | head -20)",
+      "Bash(npm ls @telegram-apps/sdk-react 2>/dev/null | head -5)",
+      "Bash(node -e \"const sdk = require\\('@telegram-apps/sdk-react'\\); console.log\\(Object.keys\\(sdk\\).join\\('\\\\n'\\)\\)\" 2>/dev/null | head -50)",
+      "Bash(node -e \"\nconst { isTMA, retrieveRawInitData } = require\\('@telegram-apps/sdk-react'\\);\nconsole.log\\('isTMA:', typeof isTMA\\);\nconsole.log\\('retrieveRawInitData:', typeof retrieveRawInitData\\);\n\" 2>&1)"
     ]
   }
 }
