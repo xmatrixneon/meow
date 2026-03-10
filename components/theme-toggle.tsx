@@ -7,14 +7,14 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  const isDark = theme === "dark";
+  const isDark = resolvedTheme === "dark";
 
   const toggleTheme = () => {
     setTheme(isDark ? "light" : "dark");
