@@ -2,13 +2,15 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Wallet, Loader2, Volume2, VolumeX, Plus } from "lucide-react";
+import { Wallet, Loader2, Volume2, VolumeX, Plus, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import type { User } from "@/types";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { useSoundEnabled } from "@/hooks/use-sound-enabled";
+import { useTheme } from "next-themes";
+import * as React from "react";
 
 type NavbarProps = { className?: string };
 
@@ -17,6 +19,15 @@ export function Navbar({ className }: NavbarProps) {
   const user = session?.user as User | undefined;
   const router = useRouter();
   const { enabled, toggle } = useSoundEnabled();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDark = theme === "dark";
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   const { data: balanceData, isLoading: balanceLoading } = trpc.wallet.balance.useQuery(
     undefined,
@@ -115,6 +126,34 @@ export function Navbar({ className }: NavbarProps) {
             }
           </motion.div>
         </motion.button>
+
+        {/* Theme toggle */}
+        {mounted && (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-xl transition-colors duration-200",
+              isDark
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
+            )}
+          >
+            <motion.div
+              key={isDark ? "dark" : "light"}
+              initial={{ scale: 0.7, opacity: 0, rotate: -90 }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 20 }}
+            >
+              {isDark
+                ? <Moon size={16} strokeWidth={2} />
+                : <Sun size={16} strokeWidth={2} />
+              }
+            </motion.div>
+          </motion.button>
+        )}
 
         {/* Avatar */}
         {user ? (

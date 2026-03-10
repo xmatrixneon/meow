@@ -11,6 +11,7 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const TelegramAuthProvider = dynamic(
   () =>
@@ -24,5 +25,14 @@ const TelegramAuthProvider = dynamic(
 );
 
 export function Providers({ children }: { children: ReactNode }) {
-  return <TelegramAuthProvider>{children}</TelegramAuthProvider>;
+  return (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <TelegramAuthProvider>{children}</TelegramAuthProvider>
+    </ThemeProvider>
+  );
 }

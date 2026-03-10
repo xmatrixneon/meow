@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: __dirname,
+  },
   allowedDevOrigins: [
     "rolf-prothallium-semiseriously.ngrok-free.dev",
     "localhost",
@@ -21,6 +24,7 @@ const nextConfig: NextConfig = {
         hostname: "telegram.org",
       },
       {
+        
         protocol: "https",
         hostname: "**.telegram.org",
       },
