@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { OtpProviderClient } from "@/lib/providers/client";
 import { generateId } from "@/lib/utils";
-import { Prisma, UserStatus, TransactionType, TransactionStatus, NumberStatus, ActiveStatus, DiscountType } from "@/app/generated/prisma/client";
+import {
+  Prisma,
+  UserStatus,
+  TransactionType,
+  TransactionStatus,
+  NumberStatus,
+  ActiveStatus,
+  DiscountType,
+} from "@/app/generated/prisma/client";
 import type { User } from "@/app/generated/prisma/client";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
@@ -59,7 +67,9 @@ export async function GET(request: NextRequest) {
     await rateLimiter.consume(user.id);
   } catch (rejRes: unknown) {
     const msBeforeNext =
-      rejRes instanceof Error ? 1000 : (rejRes as { msBeforeNext: number }).msBeforeNext;
+      rejRes instanceof Error
+        ? 1000
+        : (rejRes as { msBeforeNext: number }).msBeforeNext;
     return new NextResponse("RATE_LIMIT_EXCEEDED", {
       status: 429,
       headers: {
@@ -67,7 +77,9 @@ export async function GET(request: NextRequest) {
         "Retry-After": String(Math.ceil(msBeforeNext / 1000)),
         "X-RateLimit-Limit": "30",
         "X-RateLimit-Remaining": "0",
-        "X-RateLimit-Reset": String(Math.ceil((Date.now() + msBeforeNext) / 1000)),
+        "X-RateLimit-Reset": String(
+          Math.ceil((Date.now() + msBeforeNext) / 1000),
+        ),
       },
     });
   }
@@ -86,7 +98,10 @@ export async function GET(request: NextRequest) {
   });
 
   if (userData.status !== UserStatus.ACTIVE) {
-    return new NextResponse("ACCOUNT_BLOCKED", { status: 200, headers: corsHeaders });
+    return new NextResponse("ACCOUNT_BLOCKED", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   if (action !== "getBalance" && action !== "getStatus") {
@@ -95,7 +110,10 @@ export async function GET(request: NextRequest) {
       select: { maintenanceMode: true },
     });
     if (settings?.maintenanceMode) {
-      return new NextResponse("ERROR_MAINTENANCE", { status: 200, headers: corsHeaders });
+      return new NextResponse("ERROR_MAINTENANCE", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
   }
 
@@ -107,14 +125,23 @@ export async function GET(request: NextRequest) {
     .catch(() => {});
 
   switch (action) {
-    case "getBalance":   return handleGetBalance(user);
-    case "getCountries": return handleGetCountries();
-    case "getServices":  return handleGetServices(searchParams);
-    case "getNumber":    return handleGetNumber(searchParams, user);
-    case "getStatus":    return handleGetStatus(searchParams, user);
-    case "setStatus":    return handleSetStatus(searchParams, user);
+    case "getBalance":
+      return handleGetBalance(user);
+    case "getCountries":
+      return handleGetCountries();
+    case "getServices":
+      return handleGetServices(searchParams);
+    case "getNumber":
+      return handleGetNumber(searchParams, user);
+    case "getStatus":
+      return handleGetStatus(searchParams, user);
+    case "setStatus":
+      return handleSetStatus(searchParams, user);
     default:
-      return new NextResponse("WRONG_ACTION", { status: 200, headers: corsHeaders });
+      return new NextResponse("WRONG_ACTION", {
+        status: 200,
+        headers: corsHeaders,
+      });
   }
 }
 
@@ -124,7 +151,10 @@ async function handleGetBalance(user: User) {
   const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
 
   if (!wallet) {
-    return new NextResponse("ACCESS_BALANCE:0.00", { status: 200, headers: corsHeaders });
+    return new NextResponse("ACCESS_BALANCE:0.00", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   return new NextResponse(
@@ -144,10 +174,14 @@ async function handleGetCountries() {
 
   const response: Record<string, string> = {};
   for (const server of servers) {
-    response[server.countryCode] = server.countryName || server.name || server.countryCode;
+    response[server.countryCode] =
+      server.countryName || server.name || server.countryCode;
   }
 
-  return new NextResponse(JSON.stringify(response), { status: 200, headers: corsHeaders });
+  return new NextResponse(JSON.stringify(response), {
+    status: 200,
+    headers: corsHeaders,
+  });
 }
 
 // ─── getServices ──────────────────────────────────────────────────────────────
@@ -156,7 +190,10 @@ async function handleGetServices(searchParams: URLSearchParams) {
   const country = searchParams.get("country");
 
   if (!country) {
-    return new NextResponse("BAD_COUNTRY", { status: 200, headers: corsHeaders });
+    return new NextResponse("BAD_COUNTRY", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   const services = await prisma.service.findMany({
@@ -174,7 +211,10 @@ async function handleGetServices(searchParams: URLSearchParams) {
     response[key] = service.name;
   }
 
-  return new NextResponse(JSON.stringify(response), { status: 200, headers: corsHeaders });
+  return new NextResponse(JSON.stringify(response), {
+    status: 200,
+    headers: corsHeaders,
+  });
 }
 
 // ─── getNumber ────────────────────────────────────────────────────────────────
@@ -183,8 +223,16 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   const serviceCode = searchParams.get("service");
   const countryCode = searchParams.get("country");
 
-  if (!serviceCode) return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
-  if (!countryCode) return new NextResponse("BAD_COUNTRY", { status: 200, headers: corsHeaders });
+  if (!serviceCode)
+    return new NextResponse("BAD_SERVICE", {
+      status: 200,
+      headers: corsHeaders,
+    });
+  if (!countryCode)
+    return new NextResponse("BAD_COUNTRY", {
+      status: 200,
+      headers: corsHeaders,
+    });
 
   const settings = await prisma.settings.findUnique({ where: { id: "1" } });
   const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 15;
@@ -199,11 +247,17 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   });
 
   if (!service?.server?.api) {
-    return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
+    return new NextResponse("BAD_SERVICE", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   if (!service.server.isActive || !service.server.api.isActive) {
-    return new NextResponse("BAD_SERVICE", { status: 200, headers: corsHeaders });
+    return new NextResponse("BAD_SERVICE", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   // FIX: clamp finalPrice to zero — a discount larger than basePrice must
@@ -221,7 +275,9 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
       computed = service.basePrice.minus(customPrice.discount);
     } else {
       // PERCENT: guard against discount > 100 as well
-      const discountAmount = service.basePrice.mul(customPrice.discount.div(100));
+      const discountAmount = service.basePrice.mul(
+        customPrice.discount.div(100),
+      );
       computed = service.basePrice.minus(discountAmount);
     }
     finalPrice = computed.isNegative() ? new Decimal(0) : computed;
@@ -258,7 +314,11 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
           status: TransactionStatus.COMPLETED,
           orderId,
           description: `Purchase pending: ${service.name}`,
-          metadata: { orderId, serviceId: service.id, serviceName: service.name },
+          metadata: {
+            orderId,
+            serviceId: service.id,
+            serviceName: service.name,
+          },
         },
       });
 
@@ -283,8 +343,14 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
 
     activeNumberId = txResult.activeNumberId;
   } catch (err) {
-    if (err instanceof Error && (err.message === "NO_BALANCE" || err.message === "NO_WALLET")) {
-      return new NextResponse("NO_BALANCE", { status: 200, headers: corsHeaders });
+    if (
+      err instanceof Error &&
+      (err.message === "NO_BALANCE" || err.message === "NO_WALLET")
+    ) {
+      return new NextResponse("NO_BALANCE", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
     return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
   }
@@ -307,7 +373,10 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     await handleProviderFailure(orderId, finalPrice, user.id);
     const errorCode = result.errorCode;
     if (errorCode === "NO_NUMBER" || errorCode === "NO_NUMBERS") {
-      return new NextResponse("NO_NUMBER", { status: 200, headers: corsHeaders });
+      return new NextResponse("NO_NUMBER", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
     return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
   }
@@ -408,7 +477,10 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
   const orderId = searchParams.get("id");
 
   if (!orderId) {
-    return new NextResponse("NO_ACTIVATION", { status: 200, headers: corsHeaders });
+    return new NextResponse("NO_ACTIVATION", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   const number = await prisma.activeNumber.findFirst({
@@ -416,24 +488,38 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
   });
 
   if (!number) {
-    return new NextResponse("NO_ACTIVATION", { status: 200, headers: corsHeaders });
+    return new NextResponse("NO_ACTIVATION", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   if (number.activeStatus === ActiveStatus.CLOSED) {
     if (number.smsContent) {
-      return new NextResponse(`STATUS_OK:${extractLatestSms(number.smsContent)}`, {
-        status: 200,
-        headers: corsHeaders,
-      });
+      return new NextResponse(
+        `STATUS_OK:${extractLatestSms(number.smsContent)}`,
+        {
+          status: 200,
+          headers: corsHeaders,
+        },
+      );
     }
-    return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
+    return new NextResponse("STATUS_CANCEL", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
-  if (number.activeStatus === ActiveStatus.ACTIVE && new Date() > number.expiresAt) {
+  if (
+    number.activeStatus === ActiveStatus.ACTIVE &&
+    new Date() > number.expiresAt
+  ) {
     if (number.balanceDeducted && number.status === NumberStatus.PENDING) {
       try {
         await prisma.$transaction(async (tx) => {
-          const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
+          const wallet = await tx.wallet.findUnique({
+            where: { userId: user.id },
+          });
           if (!wallet) {
             throw new Error(
               `[stubs/getStatus] Wallet not found for userId=${user.id}, orderId=${number.orderId}`,
@@ -442,7 +528,11 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
 
           const updated = await tx.activeNumber.updateMany({
             where: { id: number.id, balanceDeducted: true },
-            data: { status: NumberStatus.CANCELLED, activeStatus: ActiveStatus.CLOSED, balanceDeducted: false },
+            data: {
+              status: NumberStatus.CANCELLED,
+              activeStatus: ActiveStatus.CLOSED,
+              balanceDeducted: false,
+            },
           });
 
           if (updated.count === 0) return;
@@ -465,7 +555,11 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
               orderId: number.orderId,
               phoneNumber: number.phoneNumber,
               description: "Auto-refund: Number expired without SMS",
-              metadata: { orderId: number.orderId, reason: "expired", serviceId: number.serviceId },
+              metadata: {
+                orderId: number.orderId,
+                reason: "expired",
+                serviceId: number.serviceId,
+              },
             },
           });
         });
@@ -475,21 +569,30 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     } else {
       await prisma.activeNumber.update({
         where: { id: number.id },
-        data: { activeStatus: "CLOSED" },
+        data: { activeStatus: ActiveStatus.CLOSED },
       });
     }
 
-    return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
-  }
-
-  if (number.smsContent) {
-    return new NextResponse(`STATUS_OK:${extractLatestSms(number.smsContent)}`, {
+    return new NextResponse("STATUS_CANCEL", {
       status: 200,
       headers: corsHeaders,
     });
   }
 
-  return new NextResponse("STATUS_WAIT_CODE", { status: 200, headers: corsHeaders });
+  if (number.smsContent) {
+    return new NextResponse(
+      `STATUS_OK:${extractLatestSms(number.smsContent)}`,
+      {
+        status: 200,
+        headers: corsHeaders,
+      },
+    );
+  }
+
+  return new NextResponse("STATUS_WAIT_CODE", {
+    status: 200,
+    headers: corsHeaders,
+  });
 }
 
 /**
@@ -514,12 +617,18 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
   const statusStr = searchParams.get("status");
 
   if (!orderId || !statusStr) {
-    return new NextResponse("BAD_ACTION", { status: 200, headers: corsHeaders });
+    return new NextResponse("BAD_ACTION", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   const statusCode = parseInt(statusStr, 10);
   if (isNaN(statusCode)) {
-    return new NextResponse("BAD_ACTION", { status: 200, headers: corsHeaders });
+    return new NextResponse("BAD_ACTION", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   const number = await prisma.activeNumber.findFirst({
@@ -530,18 +639,27 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
   });
 
   if (!number) {
-    return new NextResponse("NO_ACTIVATION", { status: 200, headers: corsHeaders });
+    return new NextResponse("NO_ACTIVATION", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   // ── Status 8: Cancel ──────────────────────────────────────────────────────
 
   if (statusCode === 8) {
-    if (number.status !== "PENDING" || number.smsContent) {
-      return new NextResponse("ACCESS_ACTIVATION", { status: 200, headers: corsHeaders });
+    if (number.status !== NumberStatus.PENDING || number.smsContent) {
+      return new NextResponse("ACCESS_ACTIVATION", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
 
     if (!number.balanceDeducted) {
-      return new NextResponse("ACCESS_ACTIVATION", { status: 200, headers: corsHeaders });
+      return new NextResponse("ACCESS_ACTIVATION", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
 
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
@@ -556,9 +674,14 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       });
     }
 
-    const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
+    const wallet = await prisma.wallet.findUnique({
+      where: { userId: user.id },
+    });
     if (!wallet) {
-      return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
+      return new NextResponse("ERROR_SQL", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
 
     const client = new OtpProviderClient({
@@ -566,15 +689,24 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       apiKey: number.service.server.api.apiKey,
     });
 
-    const cancelResponse = await client.cancelOrder(number.numberId).catch((err) => {
-      console.error(`[setStatus] Failed to cancel upstream order ${number.numberId}:`, err);
-      return { success: false };
-    });
+    const cancelResponse = await client
+      .cancelOrder(number.numberId)
+      .catch((err) => {
+        console.error(
+          `[setStatus] Failed to cancel upstream order ${number.numberId}:`,
+          err,
+        );
+        return { success: false };
+      });
 
     await prisma.$transaction(async (tx) => {
       const guard = await tx.activeNumber.updateMany({
         where: { id: number.id, balanceDeducted: true },
-        data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
+        data: {
+          status: NumberStatus.CANCELLED,
+          activeStatus: ActiveStatus.CLOSED,
+          balanceDeducted: false,
+        },
       });
 
       if (guard.count === 0) return;
@@ -609,14 +741,20 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       });
     });
 
-    return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
+    return new NextResponse("STATUS_CANCEL", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   // ── Status 3: Next SMS (multi-SMS) ────────────────────────────────────────
 
   if (statusCode === 3) {
-    if (number.status !== "COMPLETED") {
-      return new NextResponse("BAD_STATUS", { status: 200, headers: corsHeaders });
+    if (number.status !== NumberStatus.COMPLETED) {
+      return new NextResponse("BAD_STATUS", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
 
     const client = new OtpProviderClient({
@@ -630,14 +768,23 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       if (nextResult.success && nextResult.hasMore) {
         await prisma.activeNumber.update({
           where: { id: number.id },
-          data: { activeStatus: "ACTIVE" },
+          data: { activeStatus: ActiveStatus.ACTIVE },
         });
-        return new NextResponse("ACCESS_RETRY_GET", { status: 200, headers: corsHeaders });
+        return new NextResponse("ACCESS_RETRY_GET", {
+          status: 200,
+          headers: corsHeaders,
+        });
       }
 
-      return new NextResponse("ACCESS_ACTIVATION", { status: 200, headers: corsHeaders });
+      return new NextResponse("ACCESS_ACTIVATION", {
+        status: 200,
+        headers: corsHeaders,
+      });
     } catch {
-      return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
+      return new NextResponse("ERROR_SQL", {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
   }
 

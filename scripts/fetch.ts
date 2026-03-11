@@ -4,6 +4,8 @@ import 'dotenv/config';
 import {
   NumberStatus,
   ActiveStatus,
+  TransactionType,
+  TransactionStatus,
   Prisma,
 } from '../app/generated/prisma/client';
 import { prisma } from '../lib/db';
@@ -109,9 +111,9 @@ async function handleAutoRefund(
     await tx.transaction.create({
       data: {
         walletId: wallet.id,
-        type: 'REFUND',
+        type: TransactionType.REFUND,
         amount: activeNumber.price,
-        status: 'COMPLETED',
+        status: TransactionStatus.COMPLETED,
         // refundOrderId unique constraint is the DB-level dedup backstop
         refundOrderId: activeNumber.orderId,
         orderId: activeNumber.orderId,
@@ -307,7 +309,7 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
           const existingTx = await prisma.transaction.findFirst({
             where: {
               walletId: wallet.id,
-              type: 'PURCHASE',
+              type: TransactionType.PURCHASE,
               orderId: number.orderId,
             },
             select: { id: true, metadata: true },
