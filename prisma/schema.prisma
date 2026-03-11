@@ -149,8 +149,14 @@ model Wallet {
   userId        String   @unique
   /// Non-negative. Enforced by DB CHECK constraint in migration.
   balance       Decimal  @default(0) @db.Decimal(10, 2)
+  /// IMPORTANT: totalSpent tracks actual successful purchases with SMS received.
+  /// This value represents cumulative purchases where SMS was actually received.
+  /// IMPORTANT: totalSpent tracks actual successful purchases with SMS received.
+  /// This value represents cumulative purchases where SMS was actually received.
   /// Non-negative. Enforced by DB CHECK constraint in migration.
   totalSpent    Decimal  @default(0) @db.Decimal(10, 2)
+  /// IMPORTANT: totalOtp tracks the count of SMS messages received.
+  /// This count is incremented when SMS is received, not at purchase time.
   /// Non-negative. Enforced by DB CHECK constraint in migration.
   totalOtp      Int      @default(0)
   /// Non-negative. Enforced by DB CHECK constraint in migration.
@@ -426,8 +432,6 @@ model UserApi {
 
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   refreshLogs UserApiRefreshLog[]
-
-  @@index([apiKey])
 }
 
 model UserApiRefreshLog {

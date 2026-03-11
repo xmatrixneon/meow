@@ -1,7 +1,7 @@
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { prisma } from "@/lib/db";
 import { TRPCError } from "@trpc/server";
-import { nanoid } from "nanoid";
+import { generateApiKey } from "@/lib/utils";
 import {
   getRefreshRateLimitInfo,
   consumeRefreshQuota,
@@ -27,7 +27,7 @@ export const apiKeyRouter = createTRPCRouter({
 
     if (!userApi) {
       userApi = await prisma.userApi.create({
-        data: { userId, apiKey: nanoid(32), isActive: true, rateLimit: 100 },
+        data: { userId, apiKey: generateApiKey(), isActive: true, rateLimit: 100 },
       });
     }
 
@@ -71,7 +71,7 @@ export const apiKeyRouter = createTRPCRouter({
       const created = await prisma.userApi.create({
         data: {
           userId,
-          apiKey: nanoid(32),
+          apiKey: generateApiKey(),
           isActive: true,
           rateLimit: 100,
           lastRefreshedAt: now,
@@ -139,7 +139,7 @@ export const apiKeyRouter = createTRPCRouter({
       const userApi = await tx.userApi.update({
         where: { userId },
         data: {
-          apiKey: nanoid(32),
+          apiKey: generateApiKey(),
           isActive: true,
           lastRefreshedAt: now,
           refreshCount: { increment: 1 },

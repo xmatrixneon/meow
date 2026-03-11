@@ -74,12 +74,12 @@ async function bootstrapUser(userId: string): Promise<void> {
         update: { lastLogin: new Date() },
       });
 
-      const { nanoid } = await import("nanoid");
+      const { generateApiKey } = await import("@/lib/utils");
       await tx.userApi.upsert({
         where: { userId },
         create: {
           userId,
-          apiKey: nanoid(32),
+          apiKey: generateApiKey(),
           isActive: true,
           rateLimit: 100,
         },

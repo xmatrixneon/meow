@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { OtpProviderClient } from "@/lib/providers/client";
-import { nanoid } from "nanoid";
-import { Prisma, UserStatus, TransactionType, TransactionStatus } from "@/app/generated/prisma/client";
+import { generateId } from "@/lib/utils";
+import { Prisma, UserStatus, TransactionType, TransactionStatus, NumberStatus, ActiveStatus, DiscountType } from "@/app/generated/prisma/client";
 import type { User } from "@/app/generated/prisma/client";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
@@ -18,8 +18,8 @@ const rateLimiter = new RateLimiterMemory({
   keyPrefix: "stubs_api",
 });
 
-// API key format validation (nanoid generates 32 URL-safe chars)
-const API_KEY_REGEX = /^[A-Za-z0-9_-]{32}$/;
+// API key format validation (alphanumeric only, no special chars)
+const API_KEY_REGEX = /^[A-Za-z0-9]{32}$/;
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -217,7 +217,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
 
   if (customPrice) {
     let computed: Prisma.Decimal;
-    if (customPrice.type === "FLAT") {
+    if (customPrice.type === DiscountType.FLAT) {
       computed = service.basePrice.minus(customPrice.discount);
     } else {
       // PERCENT: guard against discount > 100 as well
@@ -227,7 +227,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     finalPrice = computed.isNegative() ? new Decimal(0) : computed;
   }
 
-  const orderId = nanoid(16);
+  const orderId = generateId();
   const expiresAt = new Date(Date.now() + numberExpiryMinutes * 60 * 1000);
 
   // Step 1: Deduct balance + create PENDING record atomically
@@ -244,8 +244,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
         where: { userId: user.id },
         data: {
           balance: { decrement: finalPrice },
-          totalSpent: { increment: finalPrice },
-          totalOtp: { increment: 1 },
+          // totalSpent and totalOtp are incremented only when SMS is received
         },
       });
 
@@ -273,8 +272,8 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
           orderId,
           expiresAt,
           price: finalPrice,
-          status: "PENDING",
-          activeStatus: "ACTIVE",
+          status: NumberStatus.PENDING,
+          activeStatus: ActiveStatus.ACTIVE,
           balanceDeducted: true,
         },
       });
@@ -394,8 +393,7 @@ async function handleProviderFailure(
         where: { userId },
         data: {
           balance: { increment: price },
-          totalSpent: { decrement: price },
-          totalOtp: { decrement: 1 },
+          // totalSpent and totalOtp are not touched - they only increment when SMS is received
         },
       });
     });
@@ -421,7 +419,7 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("NO_ACTIVATION", { status: 200, headers: corsHeaders });
   }
 
-  if (number.activeStatus === "CLOSED") {
+  if (number.activeStatus === ActiveStatus.CLOSED) {
     if (number.smsContent) {
       return new NextResponse(`STATUS_OK:${extractLatestSms(number.smsContent)}`, {
         status: 200,
@@ -431,8 +429,8 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     return new NextResponse("STATUS_CANCEL", { status: 200, headers: corsHeaders });
   }
 
-  if (number.activeStatus === "ACTIVE" && new Date() > number.expiresAt) {
-    if (number.balanceDeducted && number.status === "PENDING") {
+  if (number.activeStatus === ActiveStatus.ACTIVE && new Date() > number.expiresAt) {
+    if (number.balanceDeducted && number.status === NumberStatus.PENDING) {
       try {
         await prisma.$transaction(async (tx) => {
           const wallet = await tx.wallet.findUnique({ where: { userId: user.id } });
@@ -444,7 +442,7 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
 
           const updated = await tx.activeNumber.updateMany({
             where: { id: number.id, balanceDeducted: true },
-            data: { status: "CANCELLED", activeStatus: "CLOSED", balanceDeducted: false },
+            data: { status: NumberStatus.CANCELLED, activeStatus: ActiveStatus.CLOSED, balanceDeducted: false },
           });
 
           if (updated.count === 0) return;
@@ -453,8 +451,7 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
             where: { userId: user.id },
             data: {
               balance: { increment: number.price },
-              totalSpent: { decrement: number.price },
-              totalOtp: { decrement: 1 },
+              // totalSpent and totalOtp are not touched - they only increment when SMS is received
             },
           });
 
@@ -586,8 +583,7 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
         where: { userId: user.id },
         data: {
           balance: { increment: number.price },
-          totalSpent: { decrement: number.price },
-          totalOtp: { decrement: 1 },
+          // totalSpent and totalOtp are not touched - they only increment when SMS is received
         },
       });
 

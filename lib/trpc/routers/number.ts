@@ -3,8 +3,8 @@ import { prisma } from "@/lib/db";
 import { OtpProviderClient } from "@/lib/providers";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { nanoid } from "nanoid";
-import { NumberStatus, ActiveStatus, TransactionType, Prisma } from "@/app/generated/prisma/client";
+import { generateId } from "@/lib/utils";
+import { NumberStatus, ActiveStatus, TransactionType, TransactionStatus, DiscountType, Prisma } from "@/app/generated/prisma/client";
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ async function calculateFinalPrice(
   // `balance.lessThan(finalPrice)` check (negative < 0 is false) and causes
   // `balance: { decrement: negative }` to INCREMENT the wallet — free money.
   let result: Prisma.Decimal;
-  if (customPrice.type === "FLAT") {
+  if (customPrice.type === DiscountType.FLAT) {
     result = basePrice.minus(customPrice.discount);
   } else {
     // PERCENT: also guard against discount > 100 producing a negative value
@@ -110,8 +110,7 @@ async function handleBuyFailure(
         where: { userId },
         data: {
           balance: { increment: price },
-          totalSpent: { decrement: price },
-          totalOtp: { decrement: 1 },
+          // totalSpent and totalOtp are not touched - they only increment when SMS is received
         },
       });
     });
@@ -159,8 +158,7 @@ async function handleAutoRefund(
       where: { userId },
       data: {
         balance: { increment: activeNumber.price },
-        totalSpent: { decrement: activeNumber.price },
-        totalOtp: { decrement: 1 },
+        // totalSpent and totalOtp are not touched - they only increment when SMS is received
       },
     });
 
@@ -169,7 +167,7 @@ async function handleAutoRefund(
         walletId: wallet.id,
         type: TransactionType.REFUND,
         amount: activeNumber.price,
-        status: "COMPLETED",
+        status: TransactionStatus.COMPLETED,
         refundOrderId: activeNumber.orderId,
         orderId: activeNumber.orderId,
         description:
@@ -214,7 +212,7 @@ export const numberRouter = createTRPCRouter({
     const finalPrice = await calculateFinalPrice(userId, service.id, service.basePrice);
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const expiryMinutes = settings?.numberExpiryMinutes ?? 15;
-    const orderId = nanoid(16);
+    const orderId = generateId();
 
     const result = await prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
@@ -231,8 +229,7 @@ export const numberRouter = createTRPCRouter({
         where: { userId },
         data: {
           balance: { decrement: finalPrice },
-          totalSpent: { increment: finalPrice },
-          totalOtp: { increment: 1 },
+          // totalSpent and totalOtp are incremented only when SMS is received, not at purchase time
         },
       });
 
@@ -245,7 +242,7 @@ export const numberRouter = createTRPCRouter({
           walletId: wallet.id,
           type: TransactionType.PURCHASE,
           amount: finalPrice,
-          status: "COMPLETED",
+          status: TransactionStatus.COMPLETED,
           orderId,
           description: `Purchase pending: ${service.name}`,
           metadata: { orderId, serviceId: service.id, serviceName: service.name },
@@ -578,8 +575,7 @@ export const numberRouter = createTRPCRouter({
         where: { userId: ctx.user.id },
         data: {
           balance: { increment: activeNumber.price },
-          totalSpent: { decrement: activeNumber.price },
-          totalOtp: { decrement: 1 },
+          // totalSpent and totalOtp are not touched - they only increment when SMS is received
         },
       });
 
@@ -588,7 +584,7 @@ export const numberRouter = createTRPCRouter({
           walletId: wallet.id,
           type: TransactionType.REFUND,
           amount: activeNumber.price,
-          status: "COMPLETED",
+          status: TransactionStatus.COMPLETED,
           refundOrderId: activeNumber.orderId,
           orderId: activeNumber.orderId,
           description: `Cancelled: ${activeNumber.service.name} - ${activeNumber.phoneNumber}`,

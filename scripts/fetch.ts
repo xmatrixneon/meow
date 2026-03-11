@@ -96,8 +96,7 @@ async function handleAutoRefund(
       where: { userId },
       data: {
         balance: { increment: activeNumber.price },
-        totalSpent: { decrement: activeNumber.price },
-        totalOtp: { decrement: 1 },
+        // totalSpent and totalOtp are not touched - they only increment when SMS is received
       },
     });
 
@@ -285,6 +284,16 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
             // Keep ACTIVE — user needs to see it, and multi-SMS may follow
             activeStatus: ActiveStatus.ACTIVE,
             smsContent: updatedList as Prisma.InputJsonValue,
+          },
+        });
+
+        // Increment totalSpent and totalOtp only when SMS is received
+        // This tracks actual successful purchases, not pending ones
+        await prisma.wallet.update({
+          where: { userId: number.userId },
+          data: {
+            totalSpent: { increment: number.price },
+            totalOtp: { increment: 1 },
           },
         });
 
