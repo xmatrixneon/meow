@@ -24,7 +24,7 @@ const errorCodes = [
   { code: "NO_ACTIVATION",        description: "Activation not found or expired" },
   { code: "BAD_ACTION",           description: "Invalid action/status" },
   { code: "NO_NUMBER",           description: "No numbers available from provider" },
-  { code: "SERVER_ERROR",         description: "Internal server error" },
+  { code: "ERROR_SQL",         description: "Internal server error" },
   { code: "EARLY_CANCEL_DENIED",  description: "Cancel cooldown not elapsed" },
   { code: "ACCESS_ACTIVATION",    description: "SMS already received" },
   { code: "BAD_STATUS",           description: "Invalid status code" },
