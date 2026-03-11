@@ -1,6 +1,4 @@
 // lib/bot.ts
-import { config } from "dotenv";
-config({ path: "/var/www/manager/.env" });
 import { Bot } from "grammy";
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error("[bot] TELEGRAM_BOT_TOKEN is not set");

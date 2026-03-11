@@ -1,5 +1,8 @@
 import { config } from "dotenv";
-config({ path: "/var/www/manager/.env" });
+import { resolve } from "path";
+
+// Load .env from project root (parent of scripts/ directory)
+config({ path: resolve(__dirname, "../.env") });
 
 import bot from "../lib/bot";
 
