@@ -377,25 +377,20 @@ export default function WalletPage() {
         {/* Security Badges */}
         <motion.div
           {...fadeUp(0.26)}
-          className="flex flex-col items-center gap-3 pt-2 pb-4"
+          className="flex items-center justify-center gap-4 pt-2"
         >
-          <div className="flex items-center justify-center gap-4">
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                <ShieldCheck size={18} className="text-emerald-500" />
-              </div>
-              <span className="text-[9px] font-medium text-muted-foreground">256-bit SSL</span>
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <ShieldCheck size={18} className="text-emerald-500" />
             </div>
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                <Lock size={18} className="text-blue-500" />
-              </div>
-              <span className="text-[9px] font-medium text-muted-foreground">Encrypted</span>
-            </div>
-          
-          
+            <span className="text-[9px] font-medium text-muted-foreground">256-bit SSL</span>
           </div>
-         
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+              <Lock size={18} className="text-blue-500" />
+            </div>
+            <span className="text-[9px] font-medium text-muted-foreground">Encrypted</span>
+          </div>
         </motion.div>
       </div>
 
