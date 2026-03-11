@@ -187,7 +187,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   if (!countryCode) return new NextResponse("BAD_COUNTRY", { status: 200, headers: corsHeaders });
 
   const settings = await prisma.settings.findUnique({ where: { id: "1" } });
-  const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 20;
+  const numberExpiryMinutes = settings?.numberExpiryMinutes ?? 15;
 
   const service = await prisma.service.findFirst({
     where: {
@@ -308,7 +308,7 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     await handleProviderFailure(orderId, finalPrice, user.id);
     const errorCode = result.errorCode;
     if (errorCode === "NO_NUMBER" || errorCode === "NO_NUMBERS") {
-      return new NextResponse("NO_API_NUMBER", { status: 200, headers: corsHeaders });
+      return new NextResponse("NO_NUMBER", { status: 200, headers: corsHeaders });
     }
     return new NextResponse("ERROR_SQL", { status: 200, headers: corsHeaders });
   }

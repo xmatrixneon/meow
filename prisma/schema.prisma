@@ -399,7 +399,7 @@ model Settings {
   // Business rules
   referralPercent     Float   @default(0)
   minRedeem           Decimal @default(0)  @db.Decimal(10, 2)
-  numberExpiryMinutes Int     @default(20)
+  numberExpiryMinutes Int     @default(15)
   minCancelMinutes    Int     @default(2)
 
   // Feature flags

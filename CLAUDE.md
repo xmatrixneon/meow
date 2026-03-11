@@ -9,7 +9,7 @@ npm run dev          # Start development server on localhost:3000
 npm run build        # Build for production
 npm run start        # Start production server
 npm run lint         # Run ESLint
-npm run seed:bharatpe # Seed BharatPe payment data (uses tsx)
+npx tsx scripts/fetch.ts  # Run SMS poller (background process)
 ```
 
 ## Database / Prisma
@@ -104,10 +104,10 @@ The schema is defined in `prisma/schema.prisma`:
 
 ### Wallet & Payments
 - **Wallet**: User wallet with balance, totalSpent, totalOtp, totalRecharge (CHECK constraints enforce non-negative values)
-- **Transaction**: Transaction history (DEPOSIT, PURCHASE, REFUND, PROMO, REFERRAL, ADJUSTMENT) with dedup keys (txnId, refundOrderId)
+- **Transaction**: Transaction history with type (DEPOSIT, PURCHASE, REFUND, PROMO, REFERRAL, ADJUSTMENT), status (PENDING, COMPLETED, FAILED), and dedup keys (txnId, refundOrderId)
 
 ### Phone Number Services
-- **ActiveNumber**: Purchased phone numbers with status (PENDING/COMPLETED/CANCELLED), expiresAt, price, smsContent
+- **ActiveNumber**: Purchased phone numbers with status (PENDING/COMPLETED/CANCELLED), activeStatus (ACTIVE/CLOSED), expiresAt, price, smsContent, balanceDeducted flag
 - **Service**: Available services with basePrice, iconUrl, per-server pricing
 - **OtpServer**: OTP providers with country data, api credentials linkage
 - **ApiCredential**: API credentials for OTP providers (note: apiKey stored in DB - rotate via admin panel, never commit)
@@ -124,7 +124,7 @@ The schema is defined in `prisma/schema.prisma`:
 - **UserAuditLog**: Audit trail with target user, admin performer, action, changes, reason
 
 ### Configuration
-- **Settings**: Global app settings (bharatpeMerchantId, minRechargeAmount, maxRechargeAmount, numberExpiryMinutes, currency, maintenanceMode, etc.)
+- **Settings**: Global app settings (bharatpeMerchantId, bharatpeToken, bharatpeQrImage, upiId, minRechargeAmount, maxRechargeAmount, numberExpiryMinutes, minCancelMinutes, currency, maintenanceMode, referralPercent, telegramHelpUrl, telegramSupportUsername, apiDocsBaseUrl)
 
 ### Important Schema Notes
 - **Non-negative constraints**: Wallet and ActiveNumber fields have DB CHECK constraints (see migration: `add_wallet_check_constraints.sql`)
@@ -148,7 +148,7 @@ The project uses **tRPC** with **React Query** for type-safe API communication.
 - **service.ts**: Service/number provider operations
 - **number.ts**: Active number management (purchase, cancel, get SMS)
 - **wallet.ts**: Wallet operations (balance, transactions, deposits)
-- **apiKey.ts**: User API key management
+- **api-key.ts**: User API key management (with rate limiting)
 
 ### API Handler (`app/api/trpc/[trpc]/route.ts`)
 - Uses `fetchRequestHandler` from `@trpc/server/adapters/fetch`
@@ -276,9 +276,67 @@ useEffect(() => {
 - `number.getReceivedInfinite`: Completed numbers
 - `number.getCancelledInfinite`: Cancelled numbers
 
+## Rate Limiting
+
+The project uses `rate-limiter-flexible` for API key refresh rate limiting (`lib/rate-limiter.ts`).
+
+### API Key Refresh Limits
+- **30-minute cooldown** between refreshes
+- **3 refreshes per day**
+- **10 refreshes per week**
+
+### Helper Functions
+- `getRefreshRateLimitInfo(userId)`: Returns `dailyRemaining`, `weeklyRemaining`, `cooldownRemainingMs`, `canRefresh`
+- `consumeRefreshQuota(userId)`: Attempts to consume quota, returns `success` and `retryAfterMs` on failure
+
+Uses in-memory store. For distributed systems, replace with `RateLimiterRedis`.
+
+## SMS Content Utilities (`lib/sms.ts`)
+
+Utilities for handling SMS content in ActiveNumber records.
+
+### Functions
+- `computeSmsUpdate(existing, newSms)`: Pure computation — parses existing smsContent (handles legacy string format and current array format), checks for duplicates, returns `{ added, updatedList }`. Callers persist the result.
+- `appendSmsContent(numberId, newSms)`: DB read + write convenience wrapper. **IMPORTANT**: Call OUTSIDE of `prisma.$transaction` blocks to avoid isolation conflicts.
+
+### SMS Format
+```typescript
+type SmsEntry = { content: string; receivedAt: string };
+// Stored as JSON array in ActiveNumber.smsContent
+```
+
+## Sound Notifications (`lib/sound.ts`)
+
+Client-side notification sound utilities.
+
+- `preloadNotificationSound()`: Preloads `/notification.wav` into AudioContext
+- `playNotificationSound()`: Plays notification if user hasn't disabled it (checks `localStorage.sms-sound-enabled`)
+
 ## Bot Integration
 
 The project includes a **Telegram Bot** built with Grammy.
+
+### SMS Poller (`scripts/fetch.ts`)
+Background process that polls OTP providers for incoming SMS and handles auto-refunds.
+
+**Key Responsibilities:**
+- Polls active numbers for SMS delivery status (configurable via `POLL_INTERVAL` env var, default 5s)
+- Handles multi-SMS support (requests additional SMS after first is received)
+- Auto-refunds in three scenarios:
+  - **expired**: Number timed out without receiving SMS
+  - **provider_cancelled**: Provider explicitly cancelled the order
+  - **buy_failed**: Ghost PENDING records (provider never responded, 5-min TTL)
+- Closes completed numbers and notifies provider via `finishOrder`
+
+**Refund Guards:**
+- `balanceDeducted` flag prevents double-refunds from concurrent poller cycles
+- `refundOrderId` unique constraint provides DB-level dedup
+- Wallet fetched first — if missing, transaction rolls back and number stays open for retry
+
+**Concurrency:**
+- Guard flag prevents overlapping poll cycles
+- `Promise.allSettled` ensures one failure doesn't abort processing of other numbers
+- Clean shutdown on SIGINT/SIGTERM
 
 ### Bot Setup (`lib/bot.ts`)
 - **Commands**: `/start` (opens mini app with welcome message), `/help` (help text)
@@ -300,8 +358,7 @@ The project supports **BharatPe** payment integration.
 - **Exports**: `BharatPeClient`, `createBharatPeClient`, types for transactions
 
 ### Configuration
-- Settings stored in `Settings` table: `bharatpeMerchantId`, `bharatpeToken`, `bharatpeQrImage`
-- Seed script: `npm run seed:bharatpe` to populate initial data
+- Settings stored in `Settings` table: `bharatpeMerchantId`, `bharatpeToken`, `bharatpeQrImage`, `upiId`
 
 ## Project Structure
 
@@ -317,8 +374,7 @@ app/                      # Next.js App Router
   numbers/                # Phone numbers management
   profile/                # User profile page
   wallet/                 # Wallet/balance page
-  transactions/           # Transaction history
-  support/                # Support page
+  history/                # Transaction history
   error.tsx               # Error boundary
 components/
   navbar.tsx              # Top navigation bar
@@ -328,8 +384,15 @@ lib/
   auth-client.ts          # Client-side Better Auth client
   bot.ts                  # Grammy Telegram bot with /start, /help commands
   db.ts                   # Prisma client with PostgreSQL connection pool
+  rate-limiter.ts         # API key refresh rate limiting
+  sms.ts                  # SMS content utilities
+  sound.ts                # Notification sound utilities
+  telegram-web-app.ts     # Telegram WebApp helpers
   payments/               # Payment integration (BharatPe)
     bharatpe.ts           # BharatPe client and transaction verification
+  providers/              # OTP provider client
+    client.ts             # OtpProviderClient class
+    types.ts              # Type definitions and error messages
   trpc/                   # tRPC setup and routers
     trpc.ts               # tRPC context, procedures, error formatter
     client.ts             # tRPC React client
@@ -338,20 +401,22 @@ lib/
       service.ts          # Service/OTP provider operations
       number.ts           # Phone number operations
       wallet.ts           # Wallet operations
-      apiKey.ts           # User API key management
+      api-key.ts          # User API key management
   utils.ts                # Utility functions (cn for classnames)
 types/
   index.ts                # TypeScript types (User, ExtendedSession, ERROR_CODES)
   auth.ts                 # Auth-specific types (AuthState, AuthError, TelegramAuthContextValue)
 providers/
+  index.tsx               # TRPCProvider wrapper
   telegram-auth-provider.tsx  # Auto-auth for Telegram Mini Apps
 hooks/
   use-mobile.ts           # React hooks
   use-telegram-auth.ts    # Auth hook and context (useTelegramAuth)
+scripts/
+  fetch.ts                # SMS poller (background process)
 prisma/
   schema.prisma           # Database schema
   migrations/             # Database migrations
-  seed-bharatpe.ts        # BharatPe payment seed script
 ```
 
 ## Next.js Configuration
@@ -470,6 +535,8 @@ This pattern provides a type-safe state machine for authentication flows with cl
 ### Payments & Utilities
 - **date-fns** (4.1.0): Date manipulation
 - **nanoid** (5.1.6): ID generation
+- **rate-limiter-flexible** (9.1.1): Rate limiting for API key refreshes
+- **dotenv** (17.3.1): Environment variable loading for scripts
 
 ## Environment Variables
 
@@ -488,6 +555,7 @@ TELEGRAM_BOT_USERNAME=     # Your Telegram bot username
 # App URLs
 NEXT_PUBLIC_APP_URL=       # Public app URL
 
-# Optional Debug
+# Optional
 DEBUG_TRPC=1               # Enable tRPC request logging in dev
+POLL_INTERVAL=5000         # SMS poller interval in ms (default: 5000)
 ```

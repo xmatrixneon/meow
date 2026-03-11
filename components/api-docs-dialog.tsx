@@ -23,7 +23,7 @@ const errorCodes = [
   { code: "NO_BALANCE",           description: "Insufficient wallet balance" },
   { code: "NO_ACTIVATION",        description: "Activation not found or expired" },
   { code: "BAD_ACTION",           description: "Invalid action/status" },
-  { code: "NO_API_NUMBER",        description: "No numbers available from provider" },
+  { code: "NO_NUMBER",           description: "No numbers available from provider" },
   { code: "SERVER_ERROR",         description: "Internal server error" },
   { code: "EARLY_CANCEL_DENIED",  description: "Cancel cooldown not elapsed" },
   { code: "ACCESS_ACTIVATION",    description: "SMS already received" },

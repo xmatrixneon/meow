@@ -16,6 +16,8 @@ import {
   Timer,
   AlertCircle,
   RotateCcw,
+  Search,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc/client";
@@ -522,6 +524,7 @@ const TABS: { label: string; value: TabValue; icon: React.ElementType }[] = [
 
 export default function NumbersPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("waiting");
+  const [searchQuery, setSearchQuery] = useState("");
   const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -782,12 +785,33 @@ export default function NumbersPage() {
     cancelled: cancelledNumbers.length,
   };
 
-  const filtered =
+  const baseList =
     activeTab === "waiting"
       ? numbers
       : activeTab === "received"
         ? receivedNumbers
         : cancelledNumbers;
+
+  // Apply search filter
+  const filtered = useMemo(() => {
+    if (!searchQuery.trim()) return baseList;
+
+    const query = searchQuery.toLowerCase().trim();
+    return baseList.filter((item) => {
+      const phone = item.number.replace(/\D/g, "").toLowerCase();
+      const service = item.service.toLowerCase();
+      const country = item.country.toLowerCase();
+      const last10Digits = phone.slice(-10);
+
+      return (
+        phone.includes(query) ||
+        last10Digits.includes(query) ||
+        service.includes(query) ||
+        country.includes(query) ||
+        item.number.toLowerCase().includes(query)
+      );
+    });
+  }, [baseList, searchQuery]);
 
   return (
     <div className="min-h-[calc(100vh-7rem)] flex flex-col">
@@ -831,6 +855,32 @@ export default function NumbersPage() {
           })}
         </motion.div>
 
+        {/* Search input */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 280, damping: 26, delay: 0.06 }}
+          className="relative"
+        >
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by phone, service, country..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-9 py-2.5 bg-card border border-border rounded-lg text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </motion.div>
+
         {/* Get new number */}
         <Link
           href="/"
@@ -862,13 +912,17 @@ export default function NumbersPage() {
               <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
                 <Inbox size={22} className="text-muted-foreground/60" />
               </div>
-              <p className="text-sm text-muted-foreground">No numbers found</p>
+              <p className="text-sm text-muted-foreground">
+                {searchQuery.trim() ? "No matching numbers found" : "No numbers found"}
+              </p>
               <p className="text-xs text-muted-foreground/60 text-center max-w-[200px]">
-                {activeTab === "waiting"
-                  ? "Get a new number above to start receiving OTPs."
-                  : activeTab === "received"
-                    ? "Successfully received SMS will appear here."
-                    : "Cancelled orders will appear here."}
+                {searchQuery.trim()
+                  ? "Try a different search term."
+                  : activeTab === "waiting"
+                    ? "Get a new number above to start receiving OTPs."
+                    : activeTab === "received"
+                      ? "Successfully received SMS will appear here."
+                      : "Cancelled orders will appear here."}
               </p>
             </motion.div>
           ) : (

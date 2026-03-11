@@ -4,9 +4,9 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Hash, Wallet, MessageSquare, Zap, CreditCard, IndianRupee,
+  Hash, Wallet, MessageSquare, Zap, IndianRupee,
   Gift, Sparkles, Settings, Clock, XCircle, AlertCircle,
-  ShoppingBag, Loader2, TrendingDown, TrendingUp,
+  ShoppingBag, Loader2, TrendingDown, TrendingUp, Search, X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ const fadeUp = (delay = 0) => ({
   transition: { type: "spring" as const, stiffness: 280, damping: 26, delay },
 });
 
-type TxType = "numbers" | "refunds" | "deposits" | "all";
+type TxType = "numbers" | "refunds" | "deposits";
 
 interface TransactionMetadata {
   serviceName?: string; orderId?: string; smsReceived?: boolean;
@@ -32,12 +32,11 @@ interface Transaction {
   metadata: TransactionMetadata | null; createdAt: string;
 }
 
-// Tabs with icons
+// Tabs with icons (removed "All" tab)
 const TABS: { label: string; value: TxType; icon: React.ElementType }[] = [
   { label: "Numbers", value: "numbers", icon: ShoppingBag },
   { label: "Refunds", value: "refunds", icon: TrendingDown },
   { label: "Deposits", value: "deposits", icon: TrendingUp },
-  { label: "All", value: "all", icon: Hash },
 ];
 
 const getTransactionIcon = (type: string, status: string) => {
@@ -99,9 +98,10 @@ const getSubtitle = (tx: Transaction) => {
 function TransactionsSkeleton() {
   return (
     <div className="flex-1 px-4 pt-4 pb-28 max-w-md mx-auto w-full space-y-4">
-      <div className="grid grid-cols-4 gap-1.5">
-        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-9 rounded-lg" />)}
+      <div className="flex gap-1.5">
+        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-24 rounded-lg" />)}
       </div>
+      <Skeleton className="h-10 rounded-lg" />
       <div className="border border-border rounded-xl overflow-hidden">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-border/60 last:border-0">
@@ -123,6 +123,7 @@ function TransactionsSkeleton() {
 
 export default function TransactionsPage() {
   const [filter, setFilter] = useState<TxType>("numbers");
+  const [searchQuery, setSearchQuery] = useState("");
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const { data: session, isPending } = authClient.useSession();
@@ -140,7 +141,6 @@ export default function TransactionsPage() {
     () => infiniteData?.pages.flatMap((page) => page.transactions) || [],
     [infiniteData],
   );
-  const total = infiniteData?.pages[0]?.total || 0;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -161,18 +161,39 @@ export default function TransactionsPage() {
   ), [allTransactions]);
 
   const filteredTransactions = useMemo(() => {
-    if (filter === "all") return allTransactions;
-    return allTransactions.filter((tx) => {
+    let filtered = allTransactions.filter((tx) => {
       if (filter === "numbers") return tx.type === "PURCHASE" && !refundedOrderIds.has((tx.metadata as TransactionMetadata)?.orderId);
       if (filter === "refunds") return tx.type === "REFUND";
       if (filter === "deposits") return tx.type === "DEPOSIT" || tx.type === "PROMO";
       return true;
     });
-  }, [allTransactions, filter, refundedOrderIds]);
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((tx) => {
+        const typedTx = { ...tx, metadata: tx.metadata as TransactionMetadata | null };
+        const title = getTitle(typedTx);
+        const subtitle = getSubtitle(typedTx);
+        const phone = tx.phoneNumber?.toLowerCase() || "";
+        const serviceName = typedTx.metadata?.serviceName?.toLowerCase() || "";
+        const description = tx.description?.toLowerCase() || "";
+
+        return (
+          title.toLowerCase().includes(query) ||
+          subtitle.toLowerCase().includes(query) ||
+          phone.includes(query) ||
+          serviceName.includes(query) ||
+          description.includes(query)
+        );
+      });
+    }
+
+    return filtered;
+  }, [allTransactions, filter, refundedOrderIds, searchQuery]);
 
   const getCounts = (f: TxType) => {
-    if (f === "all") return total;
-    if (f === "numbers") return allTransactions.filter((t) => t.type === "PURCHASE" && !refundedOrderIds.has((t.metadata as any)?.orderId)).length;
+    if (f === "numbers") return allTransactions.filter((t) => t.type === "PURCHASE" && !refundedOrderIds.has((t.metadata as TransactionMetadata)?.orderId)).length;
     if (f === "refunds") return allTransactions.filter((t) => t.type === "REFUND").length;
     return allTransactions.filter((t) => t.type === "DEPOSIT" || t.type === "PROMO").length;
   };
@@ -238,6 +259,27 @@ export default function TransactionsPage() {
           })}
         </motion.div>
 
+        {/* Search input */}
+        <motion.div {...fadeUp(0.06)} className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by service, phone, description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-9 py-2.5 bg-card border border-border rounded-lg text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </motion.div>
+
         {/* Transaction list */}
         <AnimatePresence mode="popLayout">
           {filteredTransactions.length === 0 ? (
@@ -252,7 +294,7 @@ export default function TransactionsPage() {
                 <Hash size={22} className="text-muted-foreground/50" />
               </div>
               <p className="text-sm text-muted-foreground">
-                {filter === "all" ? "No transactions" : filter === "numbers" ? "No purchases yet" : filter === "refunds" ? "No refunds yet" : "No deposits yet"}
+                {searchQuery.trim() ? "No matching transactions" : filter === "numbers" ? "No purchases yet" : filter === "refunds" ? "No refunds yet" : "No deposits yet"}
               </p>
             </motion.div>
           ) : (

@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     question: "How long does a number last?",
-    answer: "Numbers are active for up to 20 minutes. If no SMS is received within that time, you can cancel and receive a refund (after the cancel cooldown).",
+    answer: "Numbers are active for up to 15 minutes. If no SMS is received within that time, you can cancel and receive a refund (after the cancel cooldown).",
   },
   {
     question: "Can I cancel an order?",

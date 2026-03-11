@@ -109,7 +109,14 @@
       "Bash(npx tsc --noEmit 2>&1 | head -20)",
       "Bash(npm ls @telegram-apps/sdk-react 2>/dev/null | head -5)",
       "Bash(node -e \"const sdk = require\\('@telegram-apps/sdk-react'\\); console.log\\(Object.keys\\(sdk\\).join\\('\\\\n'\\)\\)\" 2>/dev/null | head -50)",
-      "Bash(node -e \"\nconst { isTMA, retrieveRawInitData } = require\\('@telegram-apps/sdk-react'\\);\nconsole.log\\('isTMA:', typeof isTMA\\);\nconsole.log\\('retrieveRawInitData:', typeof retrieveRawInitData\\);\n\" 2>&1)"
+      "Bash(node -e \"\nconst { isTMA, retrieveRawInitData } = require\\('@telegram-apps/sdk-react'\\);\nconsole.log\\('isTMA:', typeof isTMA\\);\nconsole.log\\('retrieveRawInitData:', typeof retrieveRawInitData\\);\n\" 2>&1)",
+      "Bash(curl -s \"http://localhost:3000/api/stubs/handler_api.php?action=getNumber&service=whatsapp&country=22&api_key=mPX-VtUXnBlo0_nyeu3ZD3kL949XDJw_\")",
+      "Bash(curl -s \"http://localhost:3000/api/stubs/handler_api.php?action=getStatus&order=m_d4CMkV-bf2U6rV&api_key=mPX-VtUXnBlo0_nyeu3ZD3kL949XDJw_\")",
+      "Bash(curl -s \"http://localhost:3000/api/stubs/handler_api.php?action=getStatus&id=m_d4CMkV-bf2U6rV&api_key=mPX-VtUXnBlo0_nyeu3ZD3kL949XDJw_\")",
+      "Bash(curl -s \"http://localhost:3000/api/stubs/handler_api.php?action=setStatus&id=m_d4CMkV-bf2U6rV&status=8&api_key=mPX-VtUXnBlo0_nyeu3ZD3kL949XDJw_\")",
+      "Bash(curl -s \"http://localhost:3000/api/stubs/handler_api.php?action=getNumber&service=whatsapp&country=22&api_key=cbrrCG9m4MYHZnzIQ2LSxV3eX1pte-O8\")",
+      "Bash(npm run lint 2>&1 | head -50)",
+      "Bash(npm run lint -- --quiet 2>&1 | grep -E \"\\(history|numbers\\)\" | head -20)"
     ]
   }
 }
