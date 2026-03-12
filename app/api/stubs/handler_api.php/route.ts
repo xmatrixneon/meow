@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { OtpProviderClient } from "@/lib/providers/client";
+import { getLatestSms, hasSmsMessages } from "@/lib/sms";
 import { generateId } from "@/lib/utils";
 import {
   Prisma,
@@ -260,6 +261,24 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     });
   }
 
+  // Idempotency: Check for existing active order
+  const existingActive = await prisma.activeNumber.findFirst({
+    where: {
+      userId: user.id,
+      serviceId: service.id,
+      activeStatus: ActiveStatus.ACTIVE,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existingActive) {
+    const phone = existingActive.phoneNumber ?? "PENDING";
+    return new NextResponse(`ACCESS_NUMBER:${existingActive.orderId}:${phone}`, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
   // FIX: clamp finalPrice to zero — a discount larger than basePrice must
   // never produce a negative value. A negative price passes the
   // `balance.lessThan(finalPrice)` check and causes `decrement(negative)`
@@ -325,8 +344,8 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
       const activeNumber = await tx.activeNumber.create({
         data: {
           userId: user.id,
-          numberId: "PENDING",
-          phoneNumber: "PENDING",
+          numberId: null,
+          phoneNumber: null,
           serverId: service.serverId,
           serviceId: service.id,
           orderId,
@@ -385,7 +404,12 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
   try {
     await prisma.activeNumber.update({
       where: { id: activeNumberId },
-      data: { numberId: result.orderId, phoneNumber: result.phoneNumber },
+      data: {
+        numberId: result.orderId,
+        phoneNumber: result.phoneNumber,
+        lastProviderCheck: new Date(),
+        providerStatus: "SUCCESS",
+      },
     });
 
     await prisma.transaction.updateMany({
@@ -494,15 +518,16 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     });
   }
 
+  // Check for SMS messages using SmsMessage table
+  const hasSms = await hasSmsMessages(number.id);
+  const latestSms = hasSms ? await getLatestSms(number.id) : null;
+
   if (number.activeStatus === ActiveStatus.CLOSED) {
-    if (number.smsContent) {
-      return new NextResponse(
-        `STATUS_OK:${extractLatestSms(number.smsContent)}`,
-        {
-          status: 200,
-          headers: corsHeaders,
-        },
-      );
+    if (latestSms) {
+      return new NextResponse(`STATUS_OK:${latestSms.content}`, {
+        status: 200,
+        headers: corsHeaders,
+      });
     }
     return new NextResponse("STATUS_CANCEL", {
       status: 200,
@@ -579,35 +604,17 @@ async function handleGetStatus(searchParams: URLSearchParams, user: User) {
     });
   }
 
-  if (number.smsContent) {
-    return new NextResponse(
-      `STATUS_OK:${extractLatestSms(number.smsContent)}`,
-      {
-        status: 200,
-        headers: corsHeaders,
-      },
-    );
+  if (latestSms) {
+    return new NextResponse(`STATUS_OK:${latestSms.content}`, {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   return new NextResponse("STATUS_WAIT_CODE", {
     status: 200,
     headers: corsHeaders,
   });
-}
-
-/**
- * Extract the latest SMS text from smsContent JSON field.
- * Handles array [{ content, receivedAt }] and legacy string formats.
- */
-function extractLatestSms(smsContent: unknown): string {
-  if (Array.isArray(smsContent) && smsContent.length > 0) {
-    const latest = smsContent[smsContent.length - 1];
-    if (typeof latest === "object" && latest !== null && "content" in latest) {
-      return String((latest as { content: string }).content);
-    }
-    return String(latest);
-  }
-  return String(smsContent);
 }
 
 // ─── setStatus ────────────────────────────────────────────────────────────────
@@ -645,10 +652,13 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
     });
   }
 
+  // Check for SMS messages using SmsMessage table
+  const hasSms = await hasSmsMessages(number.id);
+
   // ── Status 8: Cancel ──────────────────────────────────────────────────────
 
   if (statusCode === 8) {
-    if (number.status !== NumberStatus.PENDING || number.smsContent) {
+    if (number.status !== NumberStatus.PENDING || hasSms) {
       return new NextResponse("ACCESS_ACTIVATION", {
         status: 200,
         headers: corsHeaders,
