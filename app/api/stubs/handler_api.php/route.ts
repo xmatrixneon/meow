@@ -261,24 +261,6 @@ async function handleGetNumber(searchParams: URLSearchParams, user: User) {
     });
   }
 
-  // Idempotency: Check for existing active order
-  const existingActive = await prisma.activeNumber.findFirst({
-    where: {
-      userId: user.id,
-      serviceId: service.id,
-      activeStatus: ActiveStatus.ACTIVE,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (existingActive) {
-    const phone = existingActive.phoneNumber ?? "PENDING";
-    return new NextResponse(`ACCESS_NUMBER:${existingActive.orderId}:${phone}`, {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
-
   // FIX: clamp finalPrice to zero — a discount larger than basePrice must
   // never produce a negative value. A negative price passes the
   // `balance.lessThan(finalPrice)` check and causes `decrement(negative)`

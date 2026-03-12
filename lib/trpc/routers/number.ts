@@ -210,32 +210,6 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Server or API is currently unavailable" });
     }
 
-    // Idempotency: Check for existing active order
-    const existingActive = await prisma.activeNumber.findFirst({
-      where: {
-        userId,
-        serviceId: service.id,
-        activeStatus: ActiveStatus.ACTIVE,
-      },
-      orderBy: { createdAt: "desc" },
-      include: {
-        service: { include: { server: true } },
-      },
-    });
-
-    if (existingActive) {
-      return {
-        id: existingActive.id,
-        orderId: existingActive.orderId,
-        phoneNumber: existingActive.phoneNumber,
-        service: { id: existingActive.service.id, name: existingActive.service.name },
-        country: existingActive.service.server?.countryName ?? "Unknown",
-        expiresAt: existingActive.expiresAt,
-        price: existingActive.price,
-        status: "existing" as const,
-      };
-    }
-
     const finalPrice = await calculateFinalPrice(userId, service.id, service.basePrice);
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const expiryMinutes = settings?.numberExpiryMinutes ?? 15;
@@ -711,6 +685,56 @@ export const numberRouter = createTRPCRouter({
 
     return { success: true, refundedAmount: activeNumber.price.toNumber() };
   }),
+
+  /**
+   * Complete an active order manually.
+   * User marks the order as finished once they received the SMS they need.
+   * This stops the poller from checking this number and saves resources.
+   */
+  complete: protectedProcedure
+    .input(z.object({ orderId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const activeNumber = await prisma.activeNumber.findFirst({
+        where: { orderId: input.orderId, userId: ctx.user.id },
+      });
+
+      if (!activeNumber) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
+      }
+
+      if (activeNumber.activeStatus === ActiveStatus.CLOSED) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Order already closed" });
+      }
+
+      // Update the number status
+      const updatedNumber = await prisma.activeNumber.update({
+        where: { id: activeNumber.id },
+        data: {
+          status: NumberStatus.COMPLETED,
+          activeStatus: ActiveStatus.CLOSED,
+        },
+      });
+
+      // Notify provider that order is finished (best-effort)
+      if (activeNumber.numberId) {
+        const service = await prisma.service.findUnique({
+          where: { id: activeNumber.serviceId },
+          include: { server: { include: { api: true } } },
+        });
+
+        if (service?.server?.api) {
+          const otpClient = new OtpProviderClient({
+            apiUrl: service.server.api.apiUrl,
+            apiKey: service.server.api.apiKey,
+          });
+          otpClient.finishOrder(activeNumber.numberId).catch((err) => {
+            console.error(`[complete] Provider finish failed for ${activeNumber.numberId}:`, err);
+          });
+        }
+      }
+
+      return { success: true };
+    }),
 
   /**
    * Purchase history with offset pagination.
