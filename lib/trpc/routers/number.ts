@@ -5,7 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { generateId } from "@/lib/utils";
 import { NumberStatus, ActiveStatus, TransactionType, TransactionStatus, DiscountType, Prisma } from "@/app/generated/prisma/client";
-import { getSmsMessages, getLatestSms, hasSmsMessages, extractOTP } from "@/lib/sms";
+import { extractOTP } from "@/lib/sms";
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
