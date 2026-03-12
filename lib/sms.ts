@@ -1,76 +1,104 @@
-import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db";
 
 export type SmsEntry = {
+  id: string;
   content: string;
-  receivedAt: string;
+  receivedAt: Date;
 };
 
 /**
- * Pure computation — no DB access.
+ * Create a new SMS message for an active number.
+ * Returns the created message or null if duplicate detected.
  *
- * Parses the existing smsContent field (handles legacy string format and
- * current array format) and returns whether the new SMS is a duplicate,
- * plus the updated list if it should be persisted.
- *
- * Callers are responsible for persisting updatedList however they need to —
- * this lets fetch.ts combine smsContent + status into a single atomic write
- * instead of doing two separate DB writes.
+ * IMPORTANT: Call OUTSIDE of prisma.$transaction blocks to avoid isolation conflicts.
  */
-export function computeSmsUpdate(
-  existing: unknown,
-  newSms: string,
-): { added: boolean; updatedList: SmsEntry[] } {
-  let parsed: SmsEntry[] = [];
+export async function createSmsMessage(
+  activeNumberId: string,
+  content: string,
+): Promise<{ created: boolean; message: SmsEntry | null }> {
+  // Check for duplicate content within last 60 seconds (debounce rapid duplicates)
+  const recentDuplicate = await prisma.smsMessage.findFirst({
+    where: {
+      activeNumberId,
+      content,
+      receivedAt: {
+        gte: new Date(Date.now() - 60 * 1000),
+      },
+    },
+  });
 
-  if (existing) {
-    if (Array.isArray(existing)) {
-      parsed = existing as SmsEntry[];
-    } else if (typeof existing === "string") {
-      // Backward-compat: old records stored a plain string
-      parsed = [{ content: existing, receivedAt: new Date().toISOString() }];
-    }
+  if (recentDuplicate) {
+    return { created: false, message: null };
   }
 
-  if (parsed.some((s) => s.content === newSms)) {
-    return { added: false, updatedList: parsed };
-  }
+  const message = await prisma.smsMessage.create({
+    data: {
+      activeNumberId,
+      content,
+    },
+    select: {
+      id: true,
+      content: true,
+      receivedAt: true,
+    },
+  });
 
-  return {
-    added: true,
-    updatedList: [...parsed, { content: newSms, receivedAt: new Date().toISOString() }],
-  };
+  return { created: true, message };
 }
 
 /**
- * Convenience wrapper for callers that only need to append smsContent and
- * don't need to combine the write with other fields (e.g. status).
- *
- * Used by the multi-SMS path in fetch.ts where status is already COMPLETED
- * and doesn't need updating alongside the new SMS.
- *
- * IMPORTANT: always call OUTSIDE of prisma.$transaction blocks —
- * calling inside causes isolation conflicts that silently roll back.
+ * Get all SMS messages for an active number, ordered by receivedAt.
  */
-export async function appendSmsContent(
-  numberId: string,
-  newSms: string,
-): Promise<{ added: boolean; updatedList: SmsEntry[] }> {
-  const current = await prisma.activeNumber.findUnique({
-    where: { id: numberId },
-    select: { smsContent: true },
+export async function getSmsMessages(activeNumberId: string): Promise<SmsEntry[]> {
+  const messages = await prisma.smsMessage.findMany({
+    where: { activeNumberId },
+    orderBy: { receivedAt: "asc" },
+    select: {
+      id: true,
+      content: true,
+      receivedAt: true,
+    },
   });
 
-  if (!current) return { added: false, updatedList: [] };
+  return messages;
+}
 
-  const result = computeSmsUpdate(current.smsContent, newSms);
+/**
+ * Get the latest SMS message for an active number.
+ */
+export async function getLatestSms(activeNumberId: string): Promise<SmsEntry | null> {
+  const message = await prisma.smsMessage.findFirst({
+    where: { activeNumberId },
+    orderBy: { receivedAt: "desc" },
+    select: {
+      id: true,
+      content: true,
+      receivedAt: true,
+    },
+  });
 
-  if (result.added) {
-    await prisma.activeNumber.update({
-      where: { id: numberId },
-      data: { smsContent: result.updatedList as Prisma.InputJsonValue },
-    });
-  }
+  return message;
+}
 
-  return result;
+/**
+ * Check if an active number has any SMS messages.
+ */
+export async function hasSmsMessages(activeNumberId: string): Promise<boolean> {
+  const count = await prisma.smsMessage.count({
+    where: { activeNumberId },
+  });
+
+  return count > 0;
+}
+
+/**
+ * Parse SMS content to extract OTP code.
+ * Looks for 4-8 digit codes in the message.
+ */
+export function extractOTP(content: string | null): string | null {
+  if (!content) return null;
+
+  // Common OTP patterns: 4-8 consecutive digits
+  const match = content.match(/\b(\d{4,8})\b/);
+  return match ? match[1] : null;
 }
