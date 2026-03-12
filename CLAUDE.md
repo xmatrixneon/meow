@@ -10,6 +10,8 @@ npm run build        # Build for production
 npm run start        # Start production server
 npm run lint         # Run ESLint
 npx tsx scripts/fetch.ts  # Run SMS poller (background process)
+npx tsx scripts/reconcile-wallet.ts  # Verify wallet balances against transaction ledger
+npx tsx scripts/reconcile-wallet.ts --fix  # Fix wallet discrepancies
 ```
 
 ## Database / Prisma
@@ -107,7 +109,8 @@ The schema is defined in `prisma/schema.prisma`:
 - **Transaction**: Transaction history with type (DEPOSIT, PURCHASE, REFUND, PROMO, REFERRAL, ADJUSTMENT), status (PENDING, COMPLETED, FAILED), and dedup keys (txnId, refundOrderId)
 
 ### Phone Number Services
-- **ActiveNumber**: Purchased phone numbers with status (PENDING/COMPLETED/CANCELLED), activeStatus (ACTIVE/CLOSED), expiresAt, price, smsContent, balanceDeducted flag
+- **ActiveNumber**: Purchased phone numbers with status (PENDING/COMPLETED/CANCELLED), activeStatus (ACTIVE/CLOSED), expiresAt, price, balanceDeducted flag, provider tracking fields (providerStatus, providerError, lastProviderCheck)
+- **SmsMessage**: SMS messages received for active numbers with content, receivedAt (normalized from previous JSON storage)
 - **Service**: Available services with basePrice, iconUrl, per-server pricing
 - **OtpServer**: OTP providers with country data, api credentials linkage
 - **ApiCredential**: API credentials for OTP providers (note: apiKey stored in DB - rotate via admin panel, never commit)
@@ -205,6 +208,40 @@ The project includes an OTP provider client for communicating with external SMS/
 - Known error codes mapped via `OTP_ERROR_MESSAGES`
 - Network errors return safe defaults (e.g., WAITING status) to avoid crashing pollers
 
+## Public API (`app/api/stubs/handler_api.php/route.ts`)
+
+External API for third-party integrators to access the service programmatically via API keys.
+
+### Authentication
+- Uses `api_key` query parameter (32-char alphanumeric)
+- API keys stored in `UserApi` table, auto-generated on user creation
+- Rate limit: **30 requests/second** per user (in-memory, use Redis for distributed)
+
+### Actions
+| Action | Description | Response |
+|--------|-------------|----------|
+| `getBalance` | Get user's wallet balance | `ACCESS_BALANCE:0.00` |
+| `getCountries` | List available countries | JSON `{ "code": "name" }` |
+| `getServices` | List services for a country | JSON `{ "code_country": "name" }` |
+| `getNumber` | Purchase a phone number | `ACCESS_NUMBER:orderId:phone` |
+| `getStatus` | Check SMS status | `STATUS_WAIT_CODE` / `STATUS_OK:sms` / `STATUS_CANCEL` |
+| `setStatus` | Cancel (8) or request next SMS (3) | `STATUS_CANCEL` / `ACCESS_RETRY_GET` |
+
+### Response Codes
+- `BAD_KEY`: Invalid API key
+- `NO_BALANCE`: Insufficient wallet balance
+- `NO_NUMBER`: No numbers available from provider
+- `BAD_SERVICE` / `BAD_COUNTRY`: Invalid parameters
+- `NO_ACTIVATION`: Order not found
+- `EARLY_CANCEL_DENIED:seconds`: Cancel attempted too soon
+- `RATE_LIMIT_EXCEEDED`: 429 with `Retry-After` header
+
+### Key Behaviors
+- **Auto-refund on expiry**: Numbers that expire without SMS are automatically refunded
+- **Min cancel time**: Users cannot cancel until `minCancelMinutes` elapsed (default 2 min)
+- **Multi-SMS support**: After first SMS, use `setStatus(3)` to request additional messages
+- **Negative price guard**: Custom discounts cannot produce negative prices (clamped to 0)
+
 ## Infinite Scroll Pattern
 
 The app uses cursor-based pagination for infinite scrolling on list pages.
@@ -293,16 +330,19 @@ Uses in-memory store. For distributed systems, replace with `RateLimiterRedis`.
 
 ## SMS Content Utilities (`lib/sms.ts`)
 
-Utilities for handling SMS content in ActiveNumber records.
+Utilities for handling SMS messages in the `SmsMessage` table.
 
 ### Functions
-- `computeSmsUpdate(existing, newSms)`: Pure computation — parses existing smsContent (handles legacy string format and current array format), checks for duplicates, returns `{ added, updatedList }`. Callers persist the result.
-- `appendSmsContent(numberId, newSms)`: DB read + write convenience wrapper. **IMPORTANT**: Call OUTSIDE of `prisma.$transaction` blocks to avoid isolation conflicts.
+- `createSmsMessage(numberId, content)`: Create new SMS message with 60-second duplicate detection
+- `getSmsMessages(numberId)`: Get all SMS messages for a number, ordered by receivedAt
+- `getLatestSms(numberId)`: Get the most recent SMS for a number
+- `hasSmsMessages(numberId)`: Check if a number has any SMS messages
+- `extractOTP(content)`: Parse SMS to extract 4-8 digit OTP code
 
-### SMS Format
+### SMS Storage
 ```typescript
-type SmsEntry = { content: string; receivedAt: string };
-// Stored as JSON array in ActiveNumber.smsContent
+type SmsEntry = { id: string; content: string; receivedAt: Date };
+// SMS messages stored in SmsMessage table with relation to ActiveNumber
 ```
 
 ## Sound Notifications (`lib/sound.ts`)
