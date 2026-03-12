@@ -285,14 +285,11 @@ model ActiveNumber {
   /// Unique order reference — used as the join key across transactions and provider calls.
   orderId String @unique
 
-  /// Provider-assigned order ID. Set to "PENDING" until provider call succeeds.
-  /// A record stuck as "PENDING" beyond PENDING_GHOST_TTL_MS is a ghost and will be refunded.
-  /// FIX(future): make nullable — null is cleaner than the "PENDING" sentinel string.
-  numberId String
+  /// Provider-assigned order ID. NULL until provider call succeeds.
+  numberId String?
 
-  /// E.164 phone number. "PENDING" until provider call succeeds (same as numberId).
-  /// FIX(future): make nullable.
-  phoneNumber String
+  /// E.164 phone number. NULL until provider call succeeds.
+  phoneNumber String?
 
   /// Purchase price at time of buy.
   /// Non-negative (0.00 allowed for 100% discount). Enforced by DB CHECK.
@@ -301,14 +298,16 @@ model ActiveNumber {
   status       NumberStatus @default(PENDING)
   activeStatus ActiveStatus @default(ACTIVE)
 
-  /// JSON array of { content: string, receivedAt: string }.
-  /// Null until first SMS arrives.
-  smsContent Json?
+  /// SMS messages received for this number.
+  smsMessages SmsMessage[]
 
   /// True while balance has been deducted and no refund issued.
-  /// Acts as an atomic guard — updateMany WHERE balanceDeducted=true
-  /// ensures only one refund path can win.
   balanceDeducted Boolean @default(false)
+
+  /// Provider tracking for debugging.
+  providerStatus    String?
+  providerError     String?
+  lastProviderCheck DateTime?
 
   createdAt DateTime @default(now())
   expiresAt DateTime
@@ -319,24 +318,29 @@ model ActiveNumber {
   server  OtpServer @relation(fields: [serverId], references: [id])
 
   // ── Pagination indexes ──────────────────────────────────────────────────────
-  // Stable compound cursor for getReceivedInfinite / getCancelledInfinite:
-  //   ORDER BY createdAt DESC, id DESC
-  //   WHERE userId=X AND activeStatus=CLOSED AND status=Y
-  //     AND (createdAt < $cursor.createdAt
-  //          OR (createdAt = $cursor.createdAt AND id < $cursor.id))
   @@index([userId, activeStatus, status, createdAt(sort: Desc), id(sort: Desc)])
 
-  // ── Poller index ────────────────────────────────────────────────────────────
-  // fetch.ts: WHERE activeStatus=ACTIVE AND status != CANCELLED AND expiresAt >= cutoff
-  // Makes the scan O(active_count) not O(total_history).
+  // ── Poller index ────────────────────────────────────────────────────
   @@index([activeStatus, expiresAt])
 
   // ── Point-lookup indexes ────────────────────────────────────────────────────
-  // cancel endpoint and stubs API: WHERE orderId=X AND userId=Y
   @@index([orderId, userId])
-  // Admin/legacy queries by userId alone
   @@index([userId, status])
   @@index([serverId])
+}
+
+// ─── SMS Messages ────────────────────────────────────────────────────────────
+
+model SmsMessage {
+  id             String   @id @default(cuid())
+  activeNumberId String
+  content        String
+  receivedAt     DateTime @default(now())
+
+  activeNumber ActiveNumber @relation(fields: [activeNumberId], references: [id], onDelete: Cascade)
+
+  @@index([activeNumberId])
+  @@index([activeNumberId, receivedAt])
 }
 
 // ─── Promotions ───────────────────────────────────────────────────────────────
