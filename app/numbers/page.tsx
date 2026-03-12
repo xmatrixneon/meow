@@ -87,14 +87,15 @@ function getFlagEmoji(iso: string): string {
   );
 }
 
-function parseSmsContent(raw: unknown): { smsList?: SmsEntry[]; displaySms?: string } {
-  if (!raw) return {};
-  if (Array.isArray(raw) && raw.length > 0) {
-    const smsList = raw as SmsEntry[];
-    return { smsList, displaySms: smsList[smsList.length - 1]?.content };
-  }
-  if (typeof raw === "string") return { displaySms: raw };
-  return {};
+function transformSmsMessages(
+  messages: Array<{ id: string; content: string; receivedAt: string | Date }> | null | undefined
+): { smsList?: SmsEntry[]; displaySms?: string } {
+  if (!messages || messages.length === 0) return {};
+  const smsList: SmsEntry[] = messages.map((m) => ({
+    content: m.content,
+    receivedAt: typeof m.receivedAt === "string" ? m.receivedAt : m.receivedAt.toISOString(),
+  }));
+  return { smsList, displaySms: smsList[smsList.length - 1]?.content };
 }
 
 function getLast10Digits(number: string): string {
@@ -629,11 +630,11 @@ export default function NumbersPage() {
     () =>
       activeData?.numbers.map((n) => {
         const server = n.service?.server;
-        const { smsList, displaySms } = parseSmsContent(n.smsContent);
+        const { smsList, displaySms } = transformSmsMessages(n.smsMessages);
         return {
           id: n.id,
           orderId: n.orderId,
-          number: n.phoneNumber,
+          number: n.phoneNumber ?? "Waiting...",
           country: server?.countryName ?? "Unknown",
           countryCode: server?.countryCode ?? "",
           countryIso: server?.countryIso ?? "",
@@ -657,11 +658,11 @@ export default function NumbersPage() {
     () =>
       receivedData?.pages.flatMap((p: any) => p.numbers).map((n: any) => {
         const server = n.service?.server;
-        const { smsList, displaySms } = parseSmsContent(n.smsContent);
+        const { smsList, displaySms } = transformSmsMessages(n.smsMessages);
         return {
           id: n.id,
           orderId: n.orderId,
-          number: n.phoneNumber,
+          number: n.phoneNumber ?? "Waiting...",
           country: server?.countryName ?? "Unknown",
           countryCode: server?.countryCode ?? "",
           countryIso: server?.countryIso ?? "",
