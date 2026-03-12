@@ -18,7 +18,6 @@ import {
   RotateCcw,
   Search,
   X,
-  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc/client";
@@ -447,30 +446,6 @@ function NumberCard({
           {copied ? "Copied!" : "Copy Number"}
         </motion.button>
 
-        {/* Finish button — only when SMS received and number still active */}
-        {hasSms && !isCancelled && onComplete && (
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            type="button"
-            onClick={() => !isCompleting && onComplete(item.orderId)}
-            disabled={isCompleting}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors disabled:opacity-60"
-          >
-            {isCompleting ? (
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                className="w-3 h-3 rounded-full border-2 border-green-500/30 border-t-green-500"
-              />
-            ) : (
-              <>
-                <Flag size={13} />
-                Finish
-              </>
-            )}
-          </motion.button>
-        )}
-
         {/* Next number */}
         {onNextNumber && item.serviceId && item.serverId && (
           <motion.button
@@ -489,10 +464,28 @@ function NumberCard({
                 className="w-3 h-3 rounded-full border-2 border-muted-foreground/30 border-t-foreground"
               />
             ) : (
-              <>
-                <RotateCcw size={13} />
-                Next
-              </>
+              <RotateCcw size={13} />
+            )}
+          </motion.button>
+        )}
+
+        {/* Finish icon — shown in cancel slot when SMS received */}
+        {hasSms && !isCancelled && onComplete && (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            onClick={() => !isCompleting && onComplete(item.orderId)}
+            disabled={isCompleting}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors disabled:opacity-60"
+          >
+            {isCompleting ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                className="w-3.5 h-3.5 rounded-full border-2 border-green-500/30 border-t-green-500"
+              />
+            ) : (
+              <CheckCheck size={14} />
             )}
           </motion.button>
         )}
