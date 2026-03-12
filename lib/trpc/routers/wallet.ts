@@ -145,7 +145,7 @@ export const walletRouter = createTRPCRouter({
             where: {
               userId,
               status: NumberStatus.COMPLETED,
-              smsContent: { not: Prisma.DbNull },
+              smsMessages: { some: {} },
             },
           }),
 
