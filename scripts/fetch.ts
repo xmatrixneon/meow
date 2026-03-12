@@ -10,11 +10,9 @@ import {
 } from '../app/generated/prisma/client';
 import { prisma } from '../lib/db';
 import { OtpProviderClient } from '../lib/providers/client';
-// computeSmsUpdate: pure computation — used when we need to combine the SMS
-//   write with other fields (status, activeStatus) in a single atomic update.
-// appendSmsContent: DB read + write — used when smsContent is the only field
-//   being updated (multi-SMS path where status is already COMPLETED).
-import { computeSmsUpdate, appendSmsContent } from '../lib/sms';
+// createSmsMessage: creates SmsMessage record in new table (deduped by content)
+// hasSmsMessages: checks if number has any SMS messages
+import { createSmsMessage, hasSmsMessages } from '../lib/sms';
 
 const _rawInterval = parseInt(process.env.POLL_INTERVAL ?? '5000', 10);
 // BUG GUARD: parseInt returns NaN for garbage strings (e.g. 'fast');
@@ -140,7 +138,7 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
   try {
     /* ───── Ghost PENDING records from failed buy transactions ───── */
 
-    if (number.numberId === 'PENDING' || number.phoneNumber === 'PENDING') {
+    if (number.numberId === null || number.phoneNumber === null) {
       const age = Date.now() - number.createdAt.getTime();
       if (age > PENDING_GHOST_TTL_MS) {
         console.warn(
@@ -164,7 +162,8 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
     /* ───── Expiry handling ───── */
 
     if (number.expiresAt && number.expiresAt.getTime() < Date.now()) {
-      if (number.smsContent) {
+      const hasSms = await hasSmsMessages(number.id);
+      if (hasSms) {
         // SMS already received — close and notify provider we're done.
         // finishOrder is best-effort; a crash here is acceptable — the
         // provider will eventually timeout on their side.
@@ -211,7 +210,8 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
 
     /* ───── Multi-SMS: check for additional SMS on already-completed numbers ───── */
 
-    if (number.smsContent && number.status === NumberStatus.COMPLETED) {
+    const hasExistingSms = await hasSmsMessages(number.id);
+    if (hasExistingSms && number.status === NumberStatus.COMPLETED) {
       // FIX: distinguish network/provider error from "no more SMS".
       // Previously: !nextCheck.success was treated the same as !hasMore —
       // a single transient network failure permanently closed the number and
@@ -223,6 +223,15 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
 
       if (!nextCheck.success) {
         // Transient error — do not close. Will retry next cycle.
+        // Update provider tracking
+        await prisma.activeNumber.update({
+          where: { id: number.id },
+          data: {
+            lastProviderCheck: new Date(),
+            providerStatus: 'API_ERROR',
+            providerError: 'getNextSms failed',
+          },
+        }).catch(() => {});
         console.warn(
           `[multi-sms] getNextSms failed for orderId=${number.orderId}, will retry next cycle`,
         );
@@ -233,7 +242,11 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
         // Definitive: provider says no more SMS — safe to close.
         await prisma.activeNumber.updateMany({
           where: { id: number.id, activeStatus: ActiveStatus.ACTIVE },
-          data: { activeStatus: ActiveStatus.CLOSED },
+          data: {
+            activeStatus: ActiveStatus.CLOSED,
+            lastProviderCheck: new Date(),
+            providerStatus: 'SUCCESS',
+          },
         });
 
         await otpClient.finishOrder(number.numberId).catch((err) => {
@@ -247,10 +260,17 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
       const additionalStatus = await otpClient.getStatus(number.numberId);
 
       if (additionalStatus.status === 'RECEIVED' && additionalStatus.sms) {
-        // appendSmsContent is correct here — status is already COMPLETED so
-        // only smsContent needs updating. No need to combine fields.
-        const { added } = await appendSmsContent(number.id, additionalStatus.sms);
-        if (added) {
+        // Use createSmsMessage for the new SmsMessage table
+        const { created } = await createSmsMessage(number.id, additionalStatus.sms);
+        if (created) {
+          // Update provider tracking on success
+          await prisma.activeNumber.update({
+            where: { id: number.id },
+            data: {
+              lastProviderCheck: new Date(),
+              providerStatus: 'SUCCESS',
+            },
+          }).catch(() => {});
           console.log(`[sms+] orderId=${number.orderId} additional SMS saved`);
         }
       }
@@ -265,27 +285,20 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
     /* ── SMS received ── */
 
     if (statusResponse.status === 'RECEIVED' && statusResponse.sms) {
-      // FIX: use computeSmsUpdate (pure, no DB write) so we can combine
-      // smsContent + status + activeStatus into a single atomic update.
-      const current = await prisma.activeNumber.findUnique({
-        where: { id: number.id },
-        select: { smsContent: true },
-      });
+      // Use createSmsMessage for the new SmsMessage table
+      // IMPORTANT: Call OUTSIDE of prisma.$transaction blocks to avoid isolation conflicts
+      const { created } = await createSmsMessage(number.id, statusResponse.sms);
 
-      const { added, updatedList } = computeSmsUpdate(
-        current?.smsContent,
-        statusResponse.sms,
-      );
-
-      if (added) {
-        // Single atomic write: smsContent + status + activeStatus together.
+      if (created) {
+        // Update status to COMPLETED on first SMS (was PENDING)
+        // Keep ACTIVE — user needs to see it, and multi-SMS may follow
         await prisma.activeNumber.update({
           where: { id: number.id },
           data: {
             status: NumberStatus.COMPLETED,
-            // Keep ACTIVE — user needs to see it, and multi-SMS may follow
             activeStatus: ActiveStatus.ACTIVE,
-            smsContent: updatedList as Prisma.InputJsonValue,
+            lastProviderCheck: new Date(),
+            providerStatus: 'SUCCESS',
           },
         });
 
@@ -341,6 +354,15 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
     /* ── Provider cancelled ── */
 
     if (statusResponse.status === 'CANCELLED') {
+      // Update provider tracking before refund
+      await prisma.activeNumber.update({
+        where: { id: number.id },
+        data: {
+          lastProviderCheck: new Date(),
+          providerStatus: 'CANCELLED',
+        },
+      }).catch(() => {});
+
       await handleAutoRefund(
         {
           id: number.id,
@@ -355,6 +377,15 @@ async function processNumber(number: ActiveNumberWithRelations): Promise<void> {
       console.log(`[cancelled] orderId=${number.orderId} refunded`);
       return;
     }
+
+    // Update provider tracking for WAITING status
+    await prisma.activeNumber.update({
+      where: { id: number.id },
+      data: {
+        lastProviderCheck: new Date(),
+        providerStatus: 'WAITING',
+      },
+    }).catch(() => {});
 
     // STATUS_WAIT_CODE — nothing to do this cycle, will poll again next interval
 
@@ -382,7 +413,7 @@ async function fetchActiveNumbers() {
       // handleAutoRefund closes them they drop out via status: { not: CANCELLED }.
       OR: [
         { expiresAt: { gte: staleCutoff } },
-        { phoneNumber: 'PENDING' },
+        { phoneNumber: null },
       ],
     },
     include: {
