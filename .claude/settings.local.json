@@ -134,7 +134,13 @@
       "Bash(npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > /var/www/manager/prisma/migrations/0_init/migration.sql)",
       "Bash(npx prisma migrate resolve --applied 0_init)",
       "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"YES\" npx prisma migrate reset --force)",
-      "Bash(npx prisma migrate deploy)"
+      "Bash(npx prisma migrate deploy)",
+      "Bash(git -C /var/www/manager status)",
+      "Bash(git -C /var/www/manager log --oneline -5)",
+      "Bash(npx tsc --noEmit scripts/fetch.ts 2>&1 || true)",
+      "Bash(npx tsc --noEmit --skipLibCheck 2>&1 | head -50 || true)",
+      "Bash(npx tsc --noEmit --skipLibCheck 2>&1 | grep -E \"^scripts/fetch.ts\" || echo \"No errors in scripts/fetch.ts\")",
+      "Bash(git add -A && git status)"
     ]
   }
 }

@@ -15,10 +15,10 @@ import { config } from "dotenv";
 config();
 
 import { prisma } from "@/lib/db";
-import { TransactionType, TransactionStatus } from "@/app/generated/prisma/client";
-import { Decimal } from "@prisma/client/runtime/library";
+import { Prisma, TransactionType, TransactionStatus } from "@/app/generated/prisma/client";
+const { Decimal } = Prisma;
 
-function toDecimal(value: unknown): Decimal {
+function toDecimal(value: unknown): Prisma.Decimal {
   if (value instanceof Decimal) return value;
   return new Decimal(String(value || 0));
 }

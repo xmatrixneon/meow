@@ -699,15 +699,15 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       apiKey: number.service.server.api.apiKey,
     });
 
-    const cancelResponse = await client
-      .cancelOrder(number.numberId)
-      .catch((err) => {
-        console.error(
-          `[setStatus] Failed to cancel upstream order ${number.numberId}:`,
-          err,
-        );
-        return { success: false };
-      });
+    const cancelResponse = number.numberId
+      ? await client.cancelOrder(number.numberId).catch((err) => {
+          console.error(
+            `[setStatus] Failed to cancel upstream order ${number.numberId}:`,
+            err,
+          );
+          return { success: false };
+        })
+      : { success: false };
 
     await prisma.$transaction(async (tx) => {
       const guard = await tx.activeNumber.updateMany({
@@ -771,6 +771,14 @@ async function handleSetStatus(searchParams: URLSearchParams, user: User) {
       apiUrl: number.service.server.api.apiUrl,
       apiKey: number.service.server.api.apiKey,
     });
+
+    // Can't get next SMS without provider order ID
+    if (!number.numberId) {
+      return new NextResponse("ACCESS_ACTIVATION", {
+        status: 200,
+        headers: corsHeaders,
+      });
+    }
 
     try {
       const nextResult = await client.getNextSms(number.numberId);

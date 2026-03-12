@@ -127,7 +127,7 @@ async function handleAutoRefund(
   activeNumber: {
     id: string;
     price: Prisma.Decimal;
-    phoneNumber: string;
+    phoneNumber: string | null;
     orderId: string;
     serviceId: string;
   },
@@ -698,13 +698,16 @@ export const numberRouter = createTRPCRouter({
 
     // Best-effort provider cancel — DB is already committed so a failure here
     // is safe. The provider will auto-expire the number on their side.
-    const otpClient = new OtpProviderClient({
-      apiUrl: activeNumber.service.server.api.apiUrl,
-      apiKey: activeNumber.service.server.api.apiKey,
-    });
-    otpClient.cancelOrder(activeNumber.numberId).catch((err) => {
-      console.error(`[cancel] Provider cancel failed for ${activeNumber.numberId}:`, err);
-    });
+    // Only call provider if we have a numberId (provider order ID).
+    if (activeNumber.numberId) {
+      const otpClient = new OtpProviderClient({
+        apiUrl: activeNumber.service.server.api.apiUrl,
+        apiKey: activeNumber.service.server.api.apiKey,
+      });
+      otpClient.cancelOrder(activeNumber.numberId).catch((err) => {
+        console.error(`[cancel] Provider cancel failed for ${activeNumber.numberId}:`, err);
+      });
+    }
 
     return { success: true, refundedAmount: activeNumber.price.toNumber() };
   }),
