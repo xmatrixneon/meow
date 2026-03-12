@@ -315,12 +315,21 @@ useEffect(() => {
 
 ## Rate Limiting
 
-The project uses `rate-limiter-flexible` for API key refresh rate limiting (`lib/rate-limiter.ts`).
+The project uses `rate-limiter-flexible` for rate limiting (`lib/rate-limiter.ts`).
+
+### Redis Support
+- Set `REDIS_URL` environment variable to enable distributed rate limiting
+- Falls back to in-memory rate limiting if Redis is not configured
+- Required for multi-instance deployments (e.g., Kubernetes, load-balanced servers)
 
 ### API Key Refresh Limits
 - **30-minute cooldown** between refreshes
 - **3 refreshes per day**
 - **10 refreshes per week**
+
+### External API Rate Limits
+- **30 requests per second** per user for `/api/stubs/handler_api.php`
+- Returns `RATE_LIMIT_EXCEEDED` with 429 status when exceeded
 
 ### Helper Functions
 - `getRefreshRateLimitInfo(userId)`: Returns `dailyRemaining`, `weeklyRemaining`, `cooldownRemainingMs`, `canRefresh`
@@ -598,4 +607,5 @@ NEXT_PUBLIC_APP_URL=       # Public app URL
 # Optional
 DEBUG_TRPC=1               # Enable tRPC request logging in dev
 POLL_INTERVAL=5000         # SMS poller interval in ms (default: 5000)
+REDIS_URL=redis://localhost:6379  # Redis URL for distributed rate limiting (optional, falls back to in-memory)
 ```

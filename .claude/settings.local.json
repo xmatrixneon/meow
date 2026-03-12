@@ -142,7 +142,21 @@
       "Bash(npx tsc --noEmit --skipLibCheck 2>&1 | grep -E \"^scripts/fetch.ts\" || echo \"No errors in scripts/fetch.ts\")",
       "Bash(git add -A && git status)",
       "Bash(git commit -m \"$\\(cat <<'EOF'\nfix: handle nullable numberId and phoneNumber in TypeScript\n\nAfter making numberId and phoneNumber nullable in ActiveNumber:\n- Add null checks before calling provider cancelOrder/getNextSms\n- Update handleAutoRefund to accept nullable phoneNumber\n- Fix Decimal import in reconcile-wallet.ts script\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(npx prisma generate && npx prisma migrate dev --name init 2>&1)"
+      "Bash(npx prisma generate && npx prisma migrate dev --name init 2>&1)",
+      "Bash(npx prisma migrate dev --name fix-sms-dedup-add-receivedat)",
+      "Bash(npx tsc --noEmit 2>&1 | head -50)",
+      "Bash(npm run lint 2>&1 | head -30)",
+      "Bash(redis-cli ping 2>&1 || echo \"Redis not running\")",
+      "Bash(sudo apt update && sudo apt install redis-server -y)",
+      "Bash(sudo systemctl start redis-server && sudo systemctl status redis-server --no-pager)",
+      "Bash(redis-cli ping)",
+      "Bash(pm2 list 2>/dev/null || systemctl status meowsms --no-pager 2>/dev/null || echo \"Checking running processes...\" && ps aux | grep -E \"next|node\" | grep -v grep | head -5)",
+      "Bash(pm2 restart meowsms-web-1 meowsms-web-2 meowsms-web-3)",
+      "Bash(pm2 restart meowsms-web-1 meowsms-web-2 meowsms-web-3 --update-env)",
+      "Bash(pm2 logs meowsms-web-1 --lines 10 --nostream 2>&1 | grep -i redis || echo \"Checking logs...\")",
+      "Bash(redis-cli keys \"*rate*\" 2>&1)",
+      "Bash(redis-cli KEYS \"*\" 2>&1)",
+      "Bash(pm2 restart meowsms-web-1 meowsms-web-2 meowsms-web-3 --update-env && sleep 3 && pm2 logs meowsms-web-1 --lines 15 --nostream 2>&1 | grep -E \"\\(rate-limiter|Redis|error\\)\" || echo \"No rate-limiter logs yet\")"
     ]
   }
 }

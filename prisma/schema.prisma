@@ -341,7 +341,7 @@ model SmsMessage {
 
   activeNumber ActiveNumber @relation(fields: [activeNumberId], references: [id], onDelete: Cascade)
 
-  @@unique([activeNumberId, content])
+  @@unique([activeNumberId, content, receivedAt])
   @@index([activeNumberId])
   @@index([activeNumberId, receivedAt])
 }

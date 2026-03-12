@@ -13,19 +13,13 @@ import {
   DiscountType,
 } from "@/app/generated/prisma/client";
 import type { User } from "@/app/generated/prisma/client";
-import { RateLimiterMemory } from "rate-limiter-flexible";
+import { RateLimiterRes } from "rate-limiter-flexible";
+import {
+  consumeApiQuota,
+  API_RATE_LIMIT,
+} from "@/lib/rate-limiter";
 
 const { Decimal } = Prisma;
-
-// ─── Rate Limiting (30 req/s per user) ───────────────────────────────────────
-// Using rate-limiter-flexible with in-memory store.
-// For distributed production, swap RateLimiterMemory with RateLimiterRedis.
-
-const rateLimiter = new RateLimiterMemory({
-  points: 30, // 30 requests
-  duration: 1, // per second
-  keyPrefix: "stubs_api",
-});
 
 // API key format validation (alphanumeric only, no special chars)
 const API_KEY_REGEX = /^[A-Za-z0-9]{32}$/;
@@ -65,18 +59,18 @@ export async function GET(request: NextRequest) {
   const user = userApi.user;
 
   try {
-    await rateLimiter.consume(user.id);
+    await consumeApiQuota(user.id);
   } catch (rejRes: unknown) {
-    const msBeforeNext =
-      rejRes instanceof Error
-        ? 1000
-        : (rejRes as { msBeforeNext: number }).msBeforeNext;
+    let msBeforeNext = 1000;
+    if (rejRes instanceof RateLimiterRes) {
+      msBeforeNext = rejRes.msBeforeNext;
+    }
     return new NextResponse("RATE_LIMIT_EXCEEDED", {
       status: 429,
       headers: {
         ...corsHeaders,
         "Retry-After": String(Math.ceil(msBeforeNext / 1000)),
-        "X-RateLimit-Limit": "30",
+        "X-RateLimit-Limit": String(API_RATE_LIMIT),
         "X-RateLimit-Remaining": "0",
         "X-RateLimit-Reset": String(
           Math.ceil((Date.now() + msBeforeNext) / 1000),

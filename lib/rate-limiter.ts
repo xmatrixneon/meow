@@ -1,6 +1,97 @@
-import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
+import {
+  RateLimiterMemory,
+  RateLimiterRedis,
+  RateLimiterRes,
+  RateLimiterAbstract,
+} from "rate-limiter-flexible";
+import Redis from "ioredis";
 
-// ─── API Key Refresh Rate Limiter ──────────────────────────────────────────────
+// ─── Redis Client (lazy singleton) ─────────────────────────────────────────────
+
+let redisClient: Redis | null = null;
+let redisConnectionAttempted = false;
+
+function getRedisClient(): Redis | null {
+  // Only attempt connection once
+  if (redisConnectionAttempted) return redisClient;
+  redisConnectionAttempted = true;
+
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    console.log("[rate-limiter] REDIS_URL not set, using in-memory rate limiting");
+    return null;
+  }
+
+  try {
+    redisClient = new Redis(redisUrl, {
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => Math.min(times * 100, 3000),
+      lazyConnect: true,
+      connectTimeout: 5000,
+    });
+
+    redisClient.on("error", (err) => {
+      console.error("[rate-limiter] Redis connection error:", err.message);
+    });
+
+    redisClient.on("connect", () => {
+      console.log("[rate-limiter] Connected to Redis");
+    });
+
+    console.log(`[rate-limiter] Redis client created for ${redisUrl.replace(/:[^:@]+@/, ':****@')}`);
+    return redisClient;
+  } catch (err) {
+    console.error("[rate-limiter] Failed to create Redis client:", err);
+    return null;
+  }
+}
+
+// ─── Lazy Rate Limiter Wrapper ─────────────────────────────────────────────────
+
+type LimiterConfig = {
+  keyPrefix: string;
+  points: number;
+  duration: number;
+  blockDuration?: number;
+};
+
+/**
+ * Lazy rate limiter that creates the actual limiter on first use.
+ * This ensures environment variables are loaded before Redis connection.
+ */
+class LazyRateLimiter {
+  private limiter: RateLimiterAbstract | null = null;
+  private config: LimiterConfig;
+
+  constructor(config: LimiterConfig) {
+    this.config = config;
+  }
+
+  private getLimiter(): RateLimiterAbstract {
+    if (!this.limiter) {
+      const redis = getRedisClient();
+      if (redis) {
+        this.limiter = new RateLimiterRedis({
+          storeClient: redis,
+          ...this.config,
+        });
+      } else {
+        this.limiter = new RateLimiterMemory(this.config);
+      }
+    }
+    return this.limiter;
+  }
+
+  async consume(key: string | number, points?: number): Promise<RateLimiterRes> {
+    return this.getLimiter().consume(key, points);
+  }
+
+  async get(key: string | number): Promise<RateLimiterRes | null> {
+    return this.getLimiter().get(key);
+  }
+}
+
+// ─── Rate Limiters (lazy initialized) ───────────────────────────────────────────
 
 /**
  * Rate limiter for API key regeneration - daily limit.
@@ -9,9 +100,9 @@ import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
  * - 3 refreshes per day
  * - 30 minute cooldown between refreshes (blockDuration)
  *
- * Uses in-memory store. For distributed systems, replace with RateLimiterRedis.
+ * Uses Redis when REDIS_URL is set, falls back to in-memory for local dev.
  */
-export const apiKeyRefreshLimiter = new RateLimiterMemory({
+const apiKeyRefreshLimiter = new LazyRateLimiter({
   keyPrefix: "api_key_refresh",
   points: 3, // 3 refreshes per day
   duration: 86400, // per 24 hours (in seconds)
@@ -22,10 +113,20 @@ export const apiKeyRefreshLimiter = new RateLimiterMemory({
  * Weekly rate limiter for API key regeneration.
  * Separate limiter to track weekly limit (10 per week).
  */
-export const apiKeyWeeklyLimiter = new RateLimiterMemory({
+const apiKeyWeeklyLimiter = new LazyRateLimiter({
   keyPrefix: "api_key_refresh_weekly",
   points: 10, // 10 refreshes per week
   duration: 604800, // per 7 days (in seconds)
+});
+
+/**
+ * Rate limiter for external API (stubs/handler_api.php).
+ * 30 requests per second per user.
+ */
+const apiRequestLimiter = new LazyRateLimiter({
+  keyPrefix: "stubs_api",
+  points: 30, // 30 requests
+  duration: 1, // per second
 });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -33,6 +134,7 @@ export const apiKeyWeeklyLimiter = new RateLimiterMemory({
 export const COOLDOWN_MS = 1800 * 1000; // 30 minutes in ms
 export const DAILY_LIMIT = 3;
 export const WEEKLY_LIMIT = 10;
+export const API_RATE_LIMIT = 30; // requests per second
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
 
@@ -58,29 +160,13 @@ export async function getRefreshRateLimitInfo(userId: string): Promise<{
     const weeklyRemaining = Math.max(0, WEEKLY_LIMIT - weeklyConsumed);
 
     // Check cooldown: if user has consumed any points and is blocked
-    // msBeforeNext represents time until points reset OR until block expires
-    // If blockDuration is active, msBeforeNext will be the block duration remaining
     let cooldownRemainingMs = 0;
 
     if (dailyRes) {
-      // If blocked (msBeforeNext > blockDuration time means we're in cooldown)
-      // Actually, when blockDuration is set, if consume fails, msBeforeNext = remaining block time
-      // We need to track last refresh time separately for accurate cooldown
-      // For simplicity, we use the consumed points and msBeforeNext to estimate
-
-      // When in cooldown, the limiter blocks for blockDuration (30 min)
-      // msBeforeNext after a failed consume = remaining block time
-      // But get() returns the time until points reset, not block time
-
-      // Alternative: check if user has consumed points recently
-      // For simplicity, we'll check if there's a recent consumption
-      // by looking at msBeforeNext relative to full duration
       if (dailyConsumed > 0 && dailyRes.msBeforeNext > 0) {
-        // Time since last refresh = full duration - msBeforeNext
         const fullDurationMs = 86400 * 1000; // 24 hours
         const timeSinceLastRefresh = fullDurationMs - dailyRes.msBeforeNext;
 
-        // If less than cooldown period has passed, user is in cooldown
         if (timeSinceLastRefresh < COOLDOWN_MS) {
           cooldownRemainingMs = COOLDOWN_MS - timeSinceLastRefresh;
         }
@@ -169,4 +255,26 @@ export async function consumeRefreshQuota(userId: string): Promise<{
       limitType: "cooldown",
     };
   }
+}
+
+/**
+ * Consume API request quota for external API.
+ * Throws RateLimiterRes on rate limit.
+ */
+export async function consumeApiQuota(userId: string): Promise<void> {
+  await apiRequestLimiter.consume(userId);
+}
+
+/**
+ * Get API rate limit info for response headers.
+ */
+export async function getApiRateLimitInfo(
+  userId: string,
+): Promise<{ msBeforeNext: number; remaining: number }> {
+  const res = await apiRequestLimiter.get(userId);
+  const consumed = res?.consumedPoints ?? 0;
+  const msBeforeNext = res?.msBeforeNext ?? 1000;
+  const remaining = Math.max(0, API_RATE_LIMIT - consumed);
+
+  return { msBeforeNext, remaining };
 }
