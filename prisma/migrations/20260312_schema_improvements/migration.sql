@@ -2,8 +2,10 @@
 -- This is a manual migration for schema improvements
 -- Includes: SmsMessage table, provider tracking fields, data migration, append-only trigger
 
+BEGIN;
+
 -- 1. Create SmsMessage table
-CREATE TABLE "SmsMessage" (
+CREATE TABLE IF NOT EXISTS "SmsMessage" (
     "id" TEXT NOT NULL,
     "activeNumberId" TEXT NOT NULL,
     "content" TEXT NOT NULL,
@@ -32,11 +34,15 @@ ALTER TABLE "ActiveNumber" ADD COLUMN "providerError" TEXT;
 ALTER TABLE "ActiveNumber" ADD COLUMN "lastProviderCheck" TIMESTAMP(3);
 
 -- 4. Convert PENDING sentinel to NULL
+-- First, alter columns to allow NULL values
+ALTER TABLE "ActiveNumber" ALTER COLUMN "numberId" DROP NOT NULL;
+ALTER TABLE "ActiveNumber" ALTER COLUMN "phoneNumber" DROP NOT NULL;
+
 UPDATE "ActiveNumber" SET "numberId" = NULL WHERE "numberId" = 'PENDING';
 UPDATE "ActiveNumber" SET "phoneNumber" = NULL WHERE "phoneNumber" = 'PENDING';
 
 -- 5. Drop smsContent column (data has been migrated)
-ALTER TABLE "ActiveNumber" DROP COLUMN "smsContent";
+ALTER TABLE "ActiveNumber" DROP COLUMN IF EXISTS "smsContent";
 
 -- 6. Add indexes for SmsMessage
 CREATE INDEX "SmsMessage_activeNumberId_idx" ON "SmsMessage"("activeNumberId");
@@ -50,6 +56,8 @@ ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_activeNumberId_fkey"
 ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_activeNumberId_content_key" UNIQUE ("activeNumberId", "content");
 
 -- 9. Create append-only trigger for Transaction table
+DROP FUNCTION IF EXISTS prevent_transaction_modification();
+
 CREATE OR REPLACE FUNCTION prevent_transaction_modification()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -63,7 +71,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS transaction_append_only ON "Transaction";
+
 CREATE TRIGGER transaction_append_only
     BEFORE UPDATE ON "Transaction"
     FOR EACH ROW
     EXECUTE FUNCTION prevent_transaction_modification();
+
+COMMIT;
