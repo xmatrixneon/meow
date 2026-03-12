@@ -140,7 +140,9 @@
       "Bash(npx tsc --noEmit scripts/fetch.ts 2>&1 || true)",
       "Bash(npx tsc --noEmit --skipLibCheck 2>&1 | head -50 || true)",
       "Bash(npx tsc --noEmit --skipLibCheck 2>&1 | grep -E \"^scripts/fetch.ts\" || echo \"No errors in scripts/fetch.ts\")",
-      "Bash(git add -A && git status)"
+      "Bash(git add -A && git status)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfix: handle nullable numberId and phoneNumber in TypeScript\n\nAfter making numberId and phoneNumber nullable in ActiveNumber:\n- Add null checks before calling provider cancelOrder/getNextSms\n- Update handleAutoRefund to accept nullable phoneNumber\n- Fix Decimal import in reconcile-wallet.ts script\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(npx prisma generate && npx prisma migrate dev --name init 2>&1)"
     ]
   }
 }

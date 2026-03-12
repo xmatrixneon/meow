@@ -72,7 +72,7 @@ INSERT INTO "Settings" (
   0.00,                                      -- minRedeem
 
   -- OTP behaviour
-  20,                                        -- numberExpiryMinutes
+  15,                                        -- numberExpiryMinutes
   2,                                         -- minCancelMinutes
 
   -- Display
