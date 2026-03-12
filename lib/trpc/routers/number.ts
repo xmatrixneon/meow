@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { generateId } from "@/lib/utils";
 import { NumberStatus, ActiveStatus, TransactionType, TransactionStatus, DiscountType, Prisma } from "@/app/generated/prisma/client";
+import { getSmsMessages, getLatestSms, hasSmsMessages, extractOTP } from "@/lib/sms";
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
@@ -209,6 +210,32 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Server or API is currently unavailable" });
     }
 
+    // Idempotency: Check for existing active order
+    const existingActive = await prisma.activeNumber.findFirst({
+      where: {
+        userId,
+        serviceId: service.id,
+        activeStatus: ActiveStatus.ACTIVE,
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        service: { include: { server: true } },
+      },
+    });
+
+    if (existingActive) {
+      return {
+        id: existingActive.id,
+        orderId: existingActive.orderId,
+        phoneNumber: existingActive.phoneNumber,
+        service: { id: existingActive.service.id, name: existingActive.service.name },
+        country: existingActive.service.server?.countryName ?? "Unknown",
+        expiresAt: existingActive.expiresAt,
+        price: existingActive.price,
+        status: "existing" as const,
+      };
+    }
+
     const finalPrice = await calculateFinalPrice(userId, service.id, service.basePrice);
     const settings = await prisma.settings.findUnique({ where: { id: "1" } });
     const expiryMinutes = settings?.numberExpiryMinutes ?? 15;
@@ -255,8 +282,8 @@ export const numberRouter = createTRPCRouter({
           serviceId: service.id,
           orderId,
           serverId: service.serverId,
-          numberId: "PENDING",
-          phoneNumber: "PENDING",
+          numberId: null,
+          phoneNumber: null,
           price: finalPrice,
           status: NumberStatus.PENDING,
           activeStatus: ActiveStatus.ACTIVE,
@@ -304,6 +331,8 @@ export const numberRouter = createTRPCRouter({
       data: {
         numberId: numberResponse.orderId,
         phoneNumber: numberResponse.phoneNumber,
+        lastProviderCheck: new Date(),
+        providerStatus: "SUCCESS",
       },
       include: { service: true },
     });
@@ -334,13 +363,27 @@ export const numberRouter = createTRPCRouter({
         userId: ctx.user.id,
         activeStatus: ActiveStatus.ACTIVE,
         status: { not: NumberStatus.CANCELLED },
-        NOT: { phoneNumber: "PENDING" },
+        phoneNumber: { not: null },
       },
-      include: { service: { include: { server: true } } },
+      include: {
+        service: { include: { server: true } },
+        smsMessages: { orderBy: { receivedAt: "asc" as const } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
-    return { numbers };
+    // Transform to include SMS data from smsMessages relation
+    const transformedNumbers = numbers.map((n) => ({
+      ...n,
+      sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
+      smsList: n.smsMessages.map((s) => ({
+        content: s.content,
+        receivedAt: s.receivedAt.toISOString(),
+      })),
+      code: n.smsMessages.length > 0 ? extractOTP(n.smsMessages[n.smsMessages.length - 1].content) : null,
+    }));
+
+    return { numbers: transformedNumbers };
   }),
 
   /**
@@ -362,7 +405,10 @@ export const numberRouter = createTRPCRouter({
           ],
         }),
       },
-      include: { service: { include: { server: true } } },
+      include: {
+        service: { include: { server: true } },
+        smsMessages: { orderBy: { receivedAt: "asc" as const } },
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
@@ -373,7 +419,18 @@ export const numberRouter = createTRPCRouter({
       nextCursor = encodeCursor(lastItem.createdAt, lastItem.id);
     }
 
-    return { numbers, nextCursor };
+    // Transform to include SMS data from smsMessages relation
+    const transformedNumbers = numbers.map((n) => ({
+      ...n,
+      sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
+      smsList: n.smsMessages.map((s) => ({
+        content: s.content,
+        receivedAt: s.receivedAt.toISOString(),
+      })),
+      code: n.smsMessages.length > 0 ? extractOTP(n.smsMessages[n.smsMessages.length - 1].content) : null,
+    }));
+
+    return { numbers: transformedNumbers, nextCursor };
   }),
 
   /**
@@ -395,7 +452,10 @@ export const numberRouter = createTRPCRouter({
           ],
         }),
       },
-      include: { service: { include: { server: true } } },
+      include: {
+        service: { include: { server: true } },
+        smsMessages: { orderBy: { receivedAt: "asc" as const } },
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
     });
@@ -406,7 +466,18 @@ export const numberRouter = createTRPCRouter({
       nextCursor = encodeCursor(lastItem.createdAt, lastItem.id);
     }
 
-    return { numbers, nextCursor };
+    // Transform to include SMS data from smsMessages relation
+    const transformedNumbers = numbers.map((n) => ({
+      ...n,
+      sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
+      smsList: n.smsMessages.map((s) => ({
+        content: s.content,
+        receivedAt: s.receivedAt.toISOString(),
+      })),
+      code: n.smsMessages.length > 0 ? extractOTP(n.smsMessages[n.smsMessages.length - 1].content) : null,
+    }));
+
+    return { numbers: transformedNumbers, nextCursor };
   }),
 
   /**
@@ -416,14 +487,28 @@ export const numberRouter = createTRPCRouter({
     const numbers = await prisma.activeNumber.findMany({
       where: {
         userId: ctx.user.id,
-        NOT: { phoneNumber: "PENDING" },
+        phoneNumber: { not: null },
       },
-      include: { service: { include: { server: true } } },
+      include: {
+        service: { include: { server: true } },
+        smsMessages: { orderBy: { receivedAt: "asc" as const } },
+      },
       orderBy: { createdAt: "desc" },
       take: 5,
     });
 
-    return { numbers };
+    // Transform to include SMS data from smsMessages relation
+    const transformedNumbers = numbers.map((n) => ({
+      ...n,
+      sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
+      smsList: n.smsMessages.map((s) => ({
+        content: s.content,
+        receivedAt: s.receivedAt.toISOString(),
+      })),
+      code: n.smsMessages.length > 0 ? extractOTP(n.smsMessages[n.smsMessages.length - 1].content) : null,
+    }));
+
+    return { numbers: transformedNumbers };
   }),
 
   /**
@@ -448,6 +533,7 @@ export const numberRouter = createTRPCRouter({
             },
           },
         },
+        smsMessages: { orderBy: { receivedAt: "asc" as const } },
       },
     });
 
@@ -455,16 +541,20 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
     }
 
+    const latestSms = activeNumber.smsMessages.length > 0 ? activeNumber.smsMessages[activeNumber.smsMessages.length - 1].content : null;
+    const hasSms = activeNumber.smsMessages.length > 0;
+
     if (activeNumber.status !== NumberStatus.PENDING) {
       return {
         status: activeNumber.status,
-        sms: activeNumber.smsContent,
+        sms: latestSms,
+        code: hasSms ? extractOTP(latestSms) : null,
         phoneNumber: activeNumber.phoneNumber,
       };
     }
 
     const isExpired = activeNumber.expiresAt && activeNumber.expiresAt.getTime() < Date.now();
-    if (isExpired && !activeNumber.smsContent) {
+    if (isExpired && !hasSms) {
       await handleAutoRefund(
         {
           id: activeNumber.id,
@@ -513,14 +603,19 @@ export const numberRouter = createTRPCRouter({
   cancel: protectedProcedure.input(cancelSchema).mutation(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
       where: { orderId: input.orderId, userId: ctx.user.id },
-      include: { service: { include: { server: { include: { api: true } } } } },
+      include: {
+        service: { include: { server: { include: { api: true } } } },
+        smsMessages: true,
+      },
     });
 
     if (!activeNumber) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
     }
 
-    if (activeNumber.status === NumberStatus.COMPLETED || activeNumber.smsContent) {
+    const hasSms = activeNumber.smsMessages.length > 0;
+
+    if (activeNumber.status === NumberStatus.COMPLETED || hasSms) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Cannot cancel — SMS has already been received",
@@ -625,7 +720,10 @@ export const numberRouter = createTRPCRouter({
           activeStatus: ActiveStatus.CLOSED,
           status: { in: [NumberStatus.COMPLETED, NumberStatus.CANCELLED] },
         },
-        include: { service: { include: { server: true } } },
+        include: {
+          service: { include: { server: true } },
+          smsMessages: { orderBy: { receivedAt: "asc" as const } },
+        },
         orderBy: { createdAt: "desc" },
         take: input.limit,
         skip: input.offset,
@@ -639,7 +737,18 @@ export const numberRouter = createTRPCRouter({
       }),
     ]);
 
-    return { numbers, total };
+    // Transform to include SMS data from smsMessages relation
+    const transformedNumbers = numbers.map((n) => ({
+      ...n,
+      sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
+      smsList: n.smsMessages.map((s) => ({
+        content: s.content,
+        receivedAt: s.receivedAt.toISOString(),
+      })),
+      code: n.smsMessages.length > 0 ? extractOTP(n.smsMessages[n.smsMessages.length - 1].content) : null,
+    }));
+
+    return { numbers: transformedNumbers, total };
   }),
 
   /**
@@ -648,11 +757,25 @@ export const numberRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
       where: { userId: ctx.user.id },
-      include: { service: { include: { server: true } } },
+      include: {
+        service: { include: { server: true } },
+        smsMessages: { orderBy: { receivedAt: "asc" as const } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
-    return { numbers, total: numbers.length };
+    // Transform to include SMS data from smsMessages relation
+    const transformedNumbers = numbers.map((n) => ({
+      ...n,
+      sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
+      smsList: n.smsMessages.map((s) => ({
+        content: s.content,
+        receivedAt: s.receivedAt.toISOString(),
+      })),
+      code: n.smsMessages.length > 0 ? extractOTP(n.smsMessages[n.smsMessages.length - 1].content) : null,
+    }));
+
+    return { numbers: transformedNumbers, total: transformedNumbers.length };
   }),
 
   /**
@@ -661,9 +784,24 @@ export const numberRouter = createTRPCRouter({
   byId: protectedProcedure
     .input(z.object({ id: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
-      return prisma.activeNumber.findFirst({
+      const number = await prisma.activeNumber.findFirst({
         where: { id: input.id, userId: ctx.user.id },
-        include: { service: { include: { server: true } } },
+        include: {
+          service: { include: { server: true } },
+          smsMessages: { orderBy: { receivedAt: "asc" as const } },
+        },
       });
+
+      if (!number) return null;
+
+      return {
+        ...number,
+        sms: number.smsMessages.length > 0 ? number.smsMessages[number.smsMessages.length - 1].content : null,
+        smsList: number.smsMessages.map((s) => ({
+          content: s.content,
+          receivedAt: s.receivedAt.toISOString(),
+        })),
+        code: number.smsMessages.length > 0 ? extractOTP(number.smsMessages[number.smsMessages.length - 1].content) : null,
+      };
     }),
 });
