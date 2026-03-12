@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Search,
   X,
+  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc/client";
@@ -248,18 +249,22 @@ function NumberCard({
   item,
   delay,
   onCancel,
+  onComplete,
   minCancelMs,
   onNextNumber,
   buyingNextNumberId,
   cancellingId,
+  completingId,
 }: {
   item: TempNumber;
   delay: number;
   onCancel?: (orderId: string) => void;
+  onComplete?: (orderId: string) => void;
   minCancelMs: number;
   onNextNumber?: (serviceId: string, serverId: string, orderId: string) => void;
   buyingNextNumberId?: string | null;
   cancellingId?: string | null;
+  completingId?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [expiresIn, setExpiresIn] = useState(() =>
@@ -288,17 +293,14 @@ function NumberCard({
   const isCancelled = item.status === "cancelled";
   const canCancel = cancelRemainingMs === 0;
   const isCancelling = cancellingId === item.orderId;
+  const isCompleting = completingId === item.orderId;
 
-  // ── FIX: derive displayStatus independently from hasSms so the
-  //    timer is not gated behind !hasSms ──────────────────────────
   const displayStatus: TabValue = isCancelled
     ? "cancelled"
     : hasSms
       ? "received"
       : "waiting";
 
-  // The number is still "active" (came from the waiting list) when it is
-  // not cancelled — we use this to decide whether to show the countdown.
   const isActive = !isCancelled;
 
   const statusMap = {
@@ -368,8 +370,6 @@ function NumberCard({
           </p>
         </div>
 
-        {/* ── FIX: show countdown for ALL active (non-cancelled) numbers,
-               regardless of whether an SMS has been received ── */}
         {isActive && !isExpired && (
           <div className="flex items-center gap-1 shrink-0">
             <Timer
@@ -387,7 +387,6 @@ function NumberCard({
           </div>
         )}
 
-        {/* Time ago for cancelled numbers */}
         {isCancelled && item.updatedAt && (
           <div className="flex items-center gap-1 shrink-0 text-muted-foreground">
             <Clock size={11} />
@@ -397,7 +396,6 @@ function NumberCard({
           </div>
         )}
 
-        {/* Time ago for received numbers once expired */}
         {displayStatus === "received" && isExpired && item.updatedAt && (
           <div className="flex items-center gap-1 shrink-0 text-green-500">
             <CheckCheck size={11} />
@@ -429,6 +427,7 @@ function NumberCard({
 
       {/* Actions */}
       <div className="px-4 pb-3.5 flex items-center gap-2">
+        {/* Copy number */}
         <motion.button
           whileTap={{ scale: 0.97 }}
           type="button"
@@ -448,6 +447,31 @@ function NumberCard({
           {copied ? "Copied!" : "Copy Number"}
         </motion.button>
 
+        {/* Finish button — only when SMS received and number still active */}
+        {hasSms && !isCancelled && onComplete && (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            onClick={() => !isCompleting && onComplete(item.orderId)}
+            disabled={isCompleting}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-colors disabled:opacity-60"
+          >
+            {isCompleting ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                className="w-3 h-3 rounded-full border-2 border-green-500/30 border-t-green-500"
+              />
+            ) : (
+              <>
+                <Flag size={13} />
+                Finish
+              </>
+            )}
+          </motion.button>
+        )}
+
+        {/* Next number */}
         {onNextNumber && item.serviceId && item.serverId && (
           <motion.button
             whileTap={{ scale: 0.97 }}
@@ -473,6 +497,7 @@ function NumberCard({
           </motion.button>
         )}
 
+        {/* Cancel button — only when waiting (no SMS) */}
         {displayStatus === "waiting" && !hasSms && onCancel && (
           canCancel ? (
             <motion.button
@@ -528,6 +553,7 @@ export default function NumbersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [buyingNextNumberId, setBuyingNextNumberId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
   const initializedRef = useRef(false);
@@ -588,6 +614,19 @@ export default function NumbersPage() {
       } else {
         toast.error(msg);
       }
+    },
+  });
+
+  const completeMutation = trpc.number.complete.useMutation({
+    onSuccess: () => {
+      setCompletingId(null);
+      utils.number.getActive.invalidate();
+      utils.number.getReceivedInfinite.invalidate();
+      toast.success("Order marked as complete!");
+    },
+    onError: (err) => {
+      setCompletingId(null);
+      toast.error(err.message || "Failed to complete order");
     },
   });
 
@@ -711,7 +750,7 @@ export default function NumbersPage() {
     [cancelledData],
   );
 
-  // ── SMS notification (counts total messages, catches multi-SMS updates) ──────
+  // ── SMS notification ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!activeData) return;
@@ -740,6 +779,14 @@ export default function NumbersPage() {
       cancelMutation.mutate({ orderId });
     },
     [cancelMutation],
+  );
+
+  const handleComplete = useCallback(
+    (orderId: string) => {
+      setCompletingId(orderId);
+      completeMutation.mutate({ orderId });
+    },
+    [completeMutation],
   );
 
   const handleNextNumber = useCallback(
@@ -793,17 +840,14 @@ export default function NumbersPage() {
         ? receivedNumbers
         : cancelledNumbers;
 
-  // Apply search filter
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return baseList;
-
     const query = searchQuery.toLowerCase().trim();
     return baseList.filter((item) => {
       const phone = item.number.replace(/\D/g, "").toLowerCase();
       const service = item.service.toLowerCase();
       const country = item.country.toLowerCase();
       const last10Digits = phone.slice(-10);
-
       return (
         phone.includes(query) ||
         last10Digits.includes(query) ||
@@ -935,6 +979,8 @@ export default function NumbersPage() {
                   delay={i * 0.03}
                   minCancelMs={minCancelMs}
                   onCancel={activeTab === "waiting" ? handleCancel : undefined}
+                  onComplete={activeTab === "waiting" ? handleComplete : undefined}
+                  completingId={completingId}
                   onNextNumber={handleNextNumber}
                   buyingNextNumberId={buyingNextNumberId}
                   cancellingId={cancellingId}

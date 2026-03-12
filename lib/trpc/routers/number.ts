@@ -24,10 +24,6 @@ const cancelSchema = z.object({
 
 const infiniteSchema = z.object({
   limit: z.number().min(1).max(100).optional().default(20),
-  // Compound cursor: JSON-encoded { createdAt: string; id: string }
-  // createdAt alone skips records sharing the same timestamp.
-  // id (cuid) alone is not guaranteed time-ordered.
-  // Together they are always unique and produce stable pages.
   cursor: z.string().optional(),
 });
 
@@ -69,15 +65,10 @@ async function calculateFinalPrice(
 
   if (!customPrice) return basePrice;
 
-  // FIX: clamp to zero — a discount larger than the base price must never
-  // produce a negative finalPrice. A negative price passes the
-  // `balance.lessThan(finalPrice)` check (negative < 0 is false) and causes
-  // `balance: { decrement: negative }` to INCREMENT the wallet — free money.
   let result: Prisma.Decimal;
   if (customPrice.type === DiscountType.FLAT) {
     result = basePrice.minus(customPrice.discount);
   } else {
-    // PERCENT: also guard against discount > 100 producing a negative value
     const discountAmount = basePrice.mul(customPrice.discount.div(100));
     result = basePrice.minus(discountAmount);
   }
@@ -85,10 +76,6 @@ async function calculateFinalPrice(
   return result.isNegative() ? new Prisma.Decimal(0) : result;
 }
 
-/**
- * Refund balance and DELETE the failed purchase record entirely.
- * Called when provider fails after balance has already been deducted.
- */
 async function handleBuyFailure(
   orderId: string,
   price: Prisma.Decimal,
@@ -109,10 +96,7 @@ async function handleBuyFailure(
 
       await tx.wallet.update({
         where: { userId },
-        data: {
-          balance: { increment: price },
-          // totalSpent and totalOtp are not touched - they only increment when SMS is received
-        },
+        data: { balance: { increment: price } },
       });
     });
   } catch (error) {
@@ -120,9 +104,6 @@ async function handleBuyFailure(
   }
 }
 
-/**
- * Auto-refund when number expires without SMS or provider cancels.
- */
 async function handleAutoRefund(
   activeNumber: {
     id: string;
@@ -157,10 +138,7 @@ async function handleAutoRefund(
 
     await tx.wallet.update({
       where: { userId },
-      data: {
-        balance: { increment: activeNumber.price },
-        // totalSpent and totalOtp are not touched - they only increment when SMS is received
-      },
+      data: { balance: { increment: activeNumber.price } },
     });
 
     await tx.transaction.create({
@@ -190,10 +168,6 @@ async function handleAutoRefund(
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export const numberRouter = createTRPCRouter({
-  /**
-   * Buy a new virtual phone number.
-   * Flow: check balance → deduct → create pending record → call provider → update.
-   */
   buy: protectedProcedure.input(buySchema).mutation(async ({ ctx, input }) => {
     const userId = ctx.user.id;
 
@@ -228,10 +202,7 @@ export const numberRouter = createTRPCRouter({
 
       const updatedWallet = await tx.wallet.update({
         where: { userId },
-        data: {
-          balance: { decrement: finalPrice },
-          // totalSpent and totalOtp are incremented only when SMS is received, not at purchase time
-        },
+        data: { balance: { decrement: finalPrice } },
       });
 
       if (updatedWallet.balance.isNegative()) {
@@ -328,9 +299,6 @@ export const numberRouter = createTRPCRouter({
     return { success: true, number: updatedNumber, message: "Number purchased successfully" };
   }),
 
-  /**
-   * Get all ACTIVE numbers for the Waiting tab.
-   */
   getActive: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
       where: {
@@ -346,7 +314,6 @@ export const numberRouter = createTRPCRouter({
       orderBy: { createdAt: "desc" },
     });
 
-    // Transform to include SMS data from smsMessages relation
     const transformedNumbers = numbers.map((n) => ({
       ...n,
       sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
@@ -360,9 +327,6 @@ export const numberRouter = createTRPCRouter({
     return { numbers: transformedNumbers };
   }),
 
-  /**
-   * Received tab — compound cursor pagination.
-   */
   getReceivedInfinite: protectedProcedure.input(infiniteSchema).query(async ({ ctx, input }) => {
     const limit = input.limit ?? 20;
     const cursor = input.cursor ? decodeCursor(input.cursor) : null;
@@ -393,7 +357,6 @@ export const numberRouter = createTRPCRouter({
       nextCursor = encodeCursor(lastItem.createdAt, lastItem.id);
     }
 
-    // Transform to include SMS data from smsMessages relation
     const transformedNumbers = numbers.map((n) => ({
       ...n,
       sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
@@ -407,9 +370,6 @@ export const numberRouter = createTRPCRouter({
     return { numbers: transformedNumbers, nextCursor };
   }),
 
-  /**
-   * Cancelled tab — compound cursor pagination.
-   */
   getCancelledInfinite: protectedProcedure.input(infiniteSchema).query(async ({ ctx, input }) => {
     const limit = input.limit ?? 20;
     const cursor = input.cursor ? decodeCursor(input.cursor) : null;
@@ -440,7 +400,6 @@ export const numberRouter = createTRPCRouter({
       nextCursor = encodeCursor(lastItem.createdAt, lastItem.id);
     }
 
-    // Transform to include SMS data from smsMessages relation
     const transformedNumbers = numbers.map((n) => ({
       ...n,
       sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
@@ -454,9 +413,6 @@ export const numberRouter = createTRPCRouter({
     return { numbers: transformedNumbers, nextCursor };
   }),
 
-  /**
-   * Last 5 numbers — homepage widget.
-   */
   getRecent: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
       where: {
@@ -471,7 +427,6 @@ export const numberRouter = createTRPCRouter({
       take: 5,
     });
 
-    // Transform to include SMS data from smsMessages relation
     const transformedNumbers = numbers.map((n) => ({
       ...n,
       sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
@@ -485,9 +440,6 @@ export const numberRouter = createTRPCRouter({
     return { numbers: transformedNumbers };
   }),
 
-  /**
-   * Get status of a specific order — pure DB read + expiry safety net.
-   */
   getStatus: protectedProcedure.input(getStatusSchema).query(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
       where: { orderId: input.orderId, userId: ctx.user.id },
@@ -556,24 +508,6 @@ export const numberRouter = createTRPCRouter({
     };
   }),
 
-  /**
-   * Cancel an active order and refund the user.
-   *
-   * FIX: DB transaction runs BEFORE the provider cancel call.
-   * Previously the provider was cancelled first — if the DB transaction then
-   * failed, the number was cancelled upstream but still showed ACTIVE in our
-   * DB. The poller would eventually self-heal, but the user saw inconsistent
-   * state for up to one poll cycle.
-   *
-   * New flow:
-   *  1. DB transaction: guard + close record + credit wallet + write REFUND tx
-   *  2. Provider cancel (best-effort, fire-and-forget on failure)
-   *
-   * Trade-off: if the provider cancel fails after a successful DB commit the
-   * provider holds the number open briefly. This is acceptable — providers
-   * auto-expire idle numbers and our record is already CANCELLED/CLOSED so
-   * the poller will not try to re-use it.
-   */
   cancel: protectedProcedure.input(cancelSchema).mutation(async ({ ctx, input }) => {
     const activeNumber = await prisma.activeNumber.findFirst({
       where: { orderId: input.orderId, userId: ctx.user.id },
@@ -621,8 +555,6 @@ export const numberRouter = createTRPCRouter({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Wallet not found" });
     }
 
-    // FIX: DB transaction FIRST — close record + refund wallet atomically.
-    // Provider cancel is called afterward as best-effort.
     await prisma.$transaction(async (tx) => {
       const guard = await tx.activeNumber.updateMany({
         where: { id: activeNumber.id, balanceDeducted: true },
@@ -642,10 +574,7 @@ export const numberRouter = createTRPCRouter({
 
       await tx.wallet.update({
         where: { userId: ctx.user.id },
-        data: {
-          balance: { increment: activeNumber.price },
-          // totalSpent and totalOtp are not touched - they only increment when SMS is received
-        },
+        data: { balance: { increment: activeNumber.price } },
       });
 
       await tx.transaction.create({
@@ -664,15 +593,11 @@ export const numberRouter = createTRPCRouter({
             serviceId: activeNumber.serviceId,
             serviceName: activeNumber.service.name,
             cancelReason: "user_requested",
-            // providerCancelSuccess filled in below after the fact
           },
         },
       });
     });
 
-    // Best-effort provider cancel — DB is already committed so a failure here
-    // is safe. The provider will auto-expire the number on their side.
-    // Only call provider if we have a numberId (provider order ID).
     if (activeNumber.numberId) {
       const otpClient = new OtpProviderClient({
         apiUrl: activeNumber.service.server.api.apiUrl,
@@ -688,14 +613,20 @@ export const numberRouter = createTRPCRouter({
 
   /**
    * Complete an active order manually.
-   * User marks the order as finished once they received the SMS they need.
-   * This stops the poller from checking this number and saves resources.
+   * User marks the order as finished once they have the SMS they need.
+   * Stops the poller from checking this number, saving resources.
+   *
+   * Guard: requires at least one SMS message to exist — prevents finishing
+   * an order that hasn't received anything yet.
    */
   complete: protectedProcedure
     .input(z.object({ orderId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const activeNumber = await prisma.activeNumber.findFirst({
         where: { orderId: input.orderId, userId: ctx.user.id },
+        include: {
+          smsMessages: { take: 1 }, // ← only need to know if any exist
+        },
       });
 
       if (!activeNumber) {
@@ -706,8 +637,15 @@ export const numberRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Order already closed" });
       }
 
-      // Update the number status
-      const updatedNumber = await prisma.activeNumber.update({
+      // Guard: must have at least one SMS before manually completing
+      if (activeNumber.smsMessages.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot finish — no SMS received yet",
+        });
+      }
+
+      await prisma.activeNumber.update({
         where: { id: activeNumber.id },
         data: {
           status: NumberStatus.COMPLETED,
@@ -715,7 +653,7 @@ export const numberRouter = createTRPCRouter({
         },
       });
 
-      // Notify provider that order is finished (best-effort)
+      // Notify provider (best-effort)
       if (activeNumber.numberId) {
         const service = await prisma.service.findUnique({
           where: { id: activeNumber.serviceId },
@@ -736,9 +674,6 @@ export const numberRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  /**
-   * Purchase history with offset pagination.
-   */
   history: protectedProcedure.input(historyOffsetSchema).query(async ({ ctx, input }) => {
     const [numbers, total] = await Promise.all([
       prisma.activeNumber.findMany({
@@ -764,7 +699,6 @@ export const numberRouter = createTRPCRouter({
       }),
     ]);
 
-    // Transform to include SMS data from smsMessages relation
     const transformedNumbers = numbers.map((n) => ({
       ...n,
       sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
@@ -778,9 +712,6 @@ export const numberRouter = createTRPCRouter({
     return { numbers: transformedNumbers, total };
   }),
 
-  /**
-   * All numbers — legacy endpoint.
-   */
   list: protectedProcedure.query(async ({ ctx }) => {
     const numbers = await prisma.activeNumber.findMany({
       where: { userId: ctx.user.id },
@@ -791,7 +722,6 @@ export const numberRouter = createTRPCRouter({
       orderBy: { createdAt: "desc" },
     });
 
-    // Transform to include SMS data from smsMessages relation
     const transformedNumbers = numbers.map((n) => ({
       ...n,
       sms: n.smsMessages.length > 0 ? n.smsMessages[n.smsMessages.length - 1].content : null,
@@ -805,9 +735,6 @@ export const numberRouter = createTRPCRouter({
     return { numbers: transformedNumbers, total: transformedNumbers.length };
   }),
 
-  /**
-   * Single number by DB id.
-   */
   byId: protectedProcedure
     .input(z.object({ id: z.string().cuid() }))
     .query(async ({ ctx, input }) => {
